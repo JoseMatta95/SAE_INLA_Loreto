@@ -1,0 +1,290 @@
+library(tidyverse)
+library(survey)
+library(janitor)
+library(sf)
+library(innovar)
+library(fastDummies)
+library(ggcorrplot)
+library(corrplot)
+library(factoextra)
+library(spdep)
+library(INLA)
+library(car)
+library(data.table)
+
+
+# This R script has two parts:
+#   I. Obtain direct estimations for wealth index and education level — including their recategorized versions (edu: at least completed primary education; wi: at least in the 3rd wi level).
+#   II. Merge the direct estimations with the PCA dataset and the full census dataset (2010–2020). The resulting datasets are saved to be used in 02_SAE_INLA_II_part.R.
+
+# Dataset from Loreto districts ---- 
+data("Peru")
+distritos<- Peru %>% mutate(ubigeo = as.character(ubigeo)) %>% filter(dep == "LORETO")
+
+# 1. data ENDES from 2010-2020 ----
+
+wi_edu_2010_2020 <-read.csv("./data/wi_edu_2010_2020.csv") %>% mutate(ubigeo = as.character(ubigeo))
+
+# 2. data censo ----
+
+## total census data from 2017 (Loreto districts)
+censo_final_loreto <- read.csv("./data/censo_2017/01.censo_final_loreto_2017.csv") %>% mutate(ubigeo = as.character(ubigeo))
+
+## Data obtained through PCA
+censo_pca_20 <- read.csv("./data/censo_2017/censo_2017_pca_20.csv") %>% mutate(ubigeo = as.character(ubigeo))
+
+
+# 3. Direct estimations with ENDES
+
+data_final_nest<-
+  wi_edu_2010_2020 %>% 
+  group_by(year) %>% 
+  nest() %>% 
+  mutate(
+    svydesign_endes= map(.x=data,
+                         .f = ~svydesign(ids = ~hv001, strata = ~hv022, 
+                                         weights = ~hv005, data = .x, nest = T)),
+    
+    wi_directa = map(.x = svydesign_endes,
+                     .f = ~svyby(~hv270, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    edu_directa = map(.x = svydesign_endes,
+                      .f = ~svyby(~hv109, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    
+    
+    wi_directa_recat = map(.x = svydesign_endes,
+                           .f = ~svyby(~hv270_recat, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    
+    edu_directa_recat = map(.x = svydesign_endes,
+                            .f = ~svyby(~hv109_recat, ~ubigeo, design = .x, svymean, keep.var = T))
+  )
+
+
+## EDA-education
+df_long<-
+  data_final_nest %>% 
+  select(year,edu_directa_recat) %>% 
+  mutate(
+    df = map(.x = edu_directa_recat,
+                  .f = ~.x %>% pivot_longer(
+                    cols = starts_with("hv109"), 
+                    names_to = "categoria", 
+                    values_to = "estimacion"
+                  ))
+  )
+
+df_long %>% 
+  select(year,df) %>% 
+  unnest(df) %>% 
+ggplot(aes(x = estimacion)) +
+  geom_histogram(binwidth = 0.05, fill = "lightblue", color = "black", alpha = 0.7) +
+ facet_grid(categoria~year) +
+  theme_minimal() +
+  labs(title = "Distribución de las estimaciones directas por categoría", x = "Estimación Directa", y = "Frecuencia")
+
+
+# 4. Merging PCA and full census datasets with direct estimations
+
+epsilon <- 0.005 
+# Since the datasets may contain values of 0 and 1, and we will transform proportions to the logit form,
+# we applied a correction: if the direct estimation is equal to 0, we add a small epsilon value. If the proportion is equal to 1, we subtract an epsilon value.
+
+direct_estimation_censo_total <- 
+  data_final_nest %>%
+  select(year,edu_directa,wi_directa,edu_directa_recat,wi_directa_recat) %>% 
+  mutate(
+    edu_censo_cpa = map(.x = edu_directa,
+                    .f = ~distritos %>% 
+                      full_join(
+                        censo_pca_20 %>% 
+                          left_join(.x) %>% 
+                          
+                          mutate(
+                            across(.cols = hv109NE:hv109SuE, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                            
+                            across(.cols = hv109NE_cor:hv109SuE_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                            
+                            se_hv109NE_cor = (se.hv109NE^2)/(hv109NE_cor^2 * (1-hv109NE_cor)^2),
+                            se_hv109PE_cor = (se.hv109PE^2)/(hv109PE_cor^2 * (1-hv109PE_cor)^2),
+                            se_hv109SE_cor = (se.hv109SE^2)/(hv109SE_cor^2 * (1-hv109SE_cor)^2),
+                            se_hv109SuE_cor = (se.hv109SuE^2)/(hv109SuE_cor^2 * (1-hv109SuE_cor)^2)
+                          ) %>% 
+                          
+                          mutate(
+                            across(se_hv109NE_cor:se_hv109SuE_cor, .f=~ifelse(.x <1e-6,1e-6,.x)) # similar to epsilon for DE
+                          )
+                      
+                      ) %>% 
+                      group_by(ubigeo) %>% 
+                      mutate(
+                        id.sp = cur_group_id()
+                      ) %>% 
+                      ungroup()),
+    
+    
+    
+    
+    wi_censo_cpa= map(.x = wi_directa,
+                   .f = ~distritos %>% 
+                     full_join(
+                       censo_pca_20 %>% 
+                         left_join(.x) %>% 
+                         
+                         mutate(
+                           across(.cols = hv2701st:hv2705th, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                           
+                           across(.cols = hv2701st_cor:hv2705th_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                           
+                           se_hv2701st_cor = (se.hv2701st^2)/(hv2701st_cor^2 * (1-hv2701st_cor)^2),
+                           se_hv2702nd_cor = (se.hv2702nd^2)/(hv2702nd_cor^2 * (1-hv2702nd_cor)^2),
+                           se_hv2703rd_cor = (se.hv2703rd^2)/(hv2703rd_cor^2 * (1-hv2703rd_cor)^2),
+                           se_hv2704th_cor = (se.hv2704th^2)/(hv2704th_cor^2 * (1-hv2704th_cor)^2),
+                           se_hv2705th_cor = (se.hv2705th^2)/(hv2705th_cor^2 * (1-hv2705th_cor)^2)
+                         ) %>% 
+                         
+                         mutate(
+                           across(se_hv2701st_cor:se_hv2705th_cor, .f=~ifelse(.x <1e-6,1e-6,.x))
+                         )
+                       
+                     ) %>% 
+                     group_by(ubigeo) %>% 
+                     mutate(
+                       id.sp = cur_group_id()
+                     ) %>% 
+                     ungroup()),
+    
+    
+    edu_censo_cpa_recat = map(.x = edu_directa_recat,
+                        .f = ~distritos %>% 
+                          full_join(
+                            censo_pca_20 %>% 
+                              left_join(.x) %>% 
+                              
+                              mutate(
+                                across(.cols = hv109_recat, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                                
+                                across(.cols = hv109_recat_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                                
+                                se_hv109_recat_cor = (se^2)/(hv109_recat_cor^2 * (1-hv109_recat_cor)^2)
+                              ) %>% 
+                              
+                              mutate(
+                                across(se_hv109_recat_cor, .f=~ifelse(.x <1e-6,1e-6,.x))
+                              )
+                            
+                          ) %>% 
+                          group_by(ubigeo) %>% 
+                          mutate(
+                            id.sp = cur_group_id()
+                          ) %>% 
+                          ungroup()),
+    
+    
+    wi_censo_cpa_recat= map(.x = wi_directa_recat,
+                      .f = ~distritos %>% 
+                        full_join(
+                          censo_pca_20 %>% 
+                            left_join(.x) %>% 
+                            
+                            mutate(
+                              across(.cols = hv270_recat, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                              
+                              across(.cols = hv270_recat_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                              
+                              se_hv270_recat_cor = (se^2)/(hv270_recat_cor^2 * (1-hv270_recat_cor)^2)
+                            ) %>% 
+                            
+                            mutate(
+                              across(se_hv270_recat_cor, .f=~ifelse(.x <1e-6,1e-6,.x))
+                            )
+                          
+                        ) %>% 
+                        group_by(ubigeo) %>% 
+                        mutate(
+                          id.sp = cur_group_id()
+                        ) %>% 
+                        ungroup()),
+    
+    
+    edu_censo_total = map(.x = edu_directa,
+                          .f = ~distritos %>% 
+                            full_join(
+                              censo_final_loreto %>%
+                                left_join(.x) %>% 
+                                
+                                mutate(
+                                  across(.cols = hv109NE:hv109SuE, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                                  
+                                  across(.cols = hv109NE_cor:hv109SuE_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                                  
+                                  se_hv109NE_cor = (se.hv109NE^2)/(hv109NE_cor^2 * (1-hv109NE_cor)^2),
+                                  se_hv109PE_cor = (se.hv109PE^2)/(hv109PE_cor^2 * (1-hv109PE_cor)^2),
+                                  se_hv109SE_cor = (se.hv109SE^2)/(hv109SE_cor^2 * (1-hv109SE_cor)^2),
+                                  se_hv109SuE_cor = (se.hv109SuE^2)/(hv109SuE_cor^2 * (1-hv109SuE_cor)^2)
+                                ) %>% 
+                                
+                                mutate(
+                                  across(se_hv109NE_cor:se_hv109SuE_cor, .f=~ifelse(.x <1e-6,1e-6,.x))
+                                )
+                              
+                            ) %>% 
+                            group_by(ubigeo) %>% 
+                            mutate(
+                              id.sp = cur_group_id()
+                            ) %>% 
+                            ungroup()),
+    
+    
+    
+    
+    wi_censo_total = map(.x = wi_directa,
+                         .f = ~distritos %>% 
+                           full_join(
+                             censo_final_loreto %>% 
+                               left_join(.x) %>% 
+                               
+                               mutate(
+                                 across(.cols = hv2701st:hv2705th, .f = ~.x * (1 - 2 * epsilon) + epsilon, .names = '{.col}_cor'),
+                                 
+                                 across(.cols = hv2701st_cor:hv2705th_cor, .f =~logit(.x), .names = '{.col}_logit'),
+                                 
+                                 se_hv2701st_cor = (se.hv2701st^2)/(hv2701st_cor^2 * (1-hv2701st_cor)^2),
+                                 se_hv2702nd_cor = (se.hv2702nd^2)/(hv2702nd_cor^2 * (1-hv2702nd_cor)^2),
+                                 se_hv2703rd_cor = (se.hv2703rd^2)/(hv2703rd_cor^2 * (1-hv2703rd_cor)^2),
+                                 se_hv2704th_cor = (se.hv2704th^2)/(hv2704th_cor^2 * (1-hv2704th_cor)^2),
+                                 se_hv2705th_cor = (se.hv2705th^2)/(hv2705th_cor^2 * (1-hv2705th_cor)^2)
+                               ) %>% 
+                               
+                               mutate(
+                                 across(se_hv2701st_cor:se_hv2705th_cor, .f=~ifelse(.x <1e-6,1e-6,.x))
+                               )
+                             
+                           ) %>% 
+                           group_by(ubigeo) %>% 
+                           mutate(
+                             id.sp = cur_group_id()
+                           ) %>% 
+                           ungroup())
+  )
+
+edu_censo_final=direct_estimation_censo_total %>% select(year,edu_censo_cpa) %>% unnest(edu_censo_cpa) %>% ungroup() %>% select(-geometry)
+wi_censo_final=direct_estimation_censo_total %>% select(year,wi_censo_cpa) %>% unnest(wi_censo_cpa) %>% ungroup() %>% select(-geometry)
+
+edu_censo_final_recat=direct_estimation_censo_total %>% select(year,edu_censo_cpa_recat) %>% unnest(edu_censo_cpa_recat) %>% ungroup() %>% select(-geometry)
+wi_censo_final_recat=direct_estimation_censo_total %>% select(year,wi_censo_cpa_recat) %>% unnest(wi_censo_cpa_recat) %>% ungroup() %>% select(-geometry)
+
+#edu_censo_total=direct_estimation_censo_total %>% select(year,edu_censo_total) %>% unnest(edu_censo_total) %>% ungroup() %>% select(-geometry)
+#wi_censo_total=direct_estimation_censo_total %>% select(year,wi_censo_total) %>% unnest(wi_censo_total) %>% ungroup() %>% select(-geometry)
+
+  
+write.csv(edu_censo_final, "./data/edu_censo_final.csv", row.names = F)
+write.csv(wi_censo_final, "./data/wi_censo_final.csv", row.names = F)
+
+write.csv(edu_censo_final_recat, "./data/edu_censo_final_recat.csv", row.names = F)
+write.csv(wi_censo_final_recat, "./data/wi_censo_final_recat.csv", row.names = F)
+
+#write.csv(edu_censo_total, "./data/edu_censo_total.csv", row.names = F)
+#write.csv(wi_censo_total, "./data/wi_censo_total.csv", row.names = F)
+
