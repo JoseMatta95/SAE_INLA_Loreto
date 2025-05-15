@@ -14,7 +14,7 @@ distritos_years<-
   year = 2010:2020
 )
 
-leer_dbf_desde_zips <- function(urls) {
+get_censo_edu <- function(urls) {
   purrr::map(urls, function(url) {
     temp_zip <- tempfile(fileext = ".zip")
     dir_temp <- tempdir()
@@ -108,4 +108,65 @@ edu_minedu_year<-
   ) %>% 
   ungroup() %>% 
   filter(ubigeo!=160109)
+
+
+# 2. trasnferencia de fondos a los gobiernos
+
+library(tidyverse)
+library(janitor)
+
+
+get_transf_mef<-function(year,dep=NULL){
+  temp <- tempfile() ; tempdir <- tempdir()
+  
+  ruta_base <- "https://fs.datosabiertos.mef.gob.pe/datastorefiles/"
+  url <- paste0(ruta_base,year,"-Transferencias.csv")
+  
+  download.file(url,temp)
+  
+  data<- data.table::fread(file = temp) %>% 
+    filter(DEPARTAMENTO_EJECUTORA == dep) %>% 
+    janitor::clean_names() %>%  
+    as_tibble()
+  
+  return(data)
+}
+
+transf_mef_loreto<-
+  map_df(.x = c(2010:2020),
+    .f = ~get_transf_mef(year = .x,dep = 16))
+
+
+transf_mef_loreto_suma<-
+  transf_mef_loreto %>% 
+  select(ano_prc,departamento_ejecutora,provincia_ejecutora,distrito_ejecutora,distrito_ejecutora_nombre,monto_acreditado) %>% 
+  mutate(
+    cod_dist = ifelse(distrito_ejecutora<10,paste0("0",distrito_ejecutora),distrito_ejecutora),
+    cod_prov = ifelse(provincia_ejecutora<10,paste0("0",provincia_ejecutora),provincia_ejecutora),
+    ubigeo = paste0(departamento_ejecutora,cod_prov,cod_dist),
+    
+    ubigeo = case_when(ubigeo == "160204" ~ "160702", # ubigeos that changed after 2015
+                       ubigeo == "160203" ~ "160701",
+                       ubigeo == "160207" ~ "160703",
+                       ubigeo == "160208" ~ "160704",
+                       ubigeo == "160209" ~ "160705",
+                       ubigeo == "160114" ~ "160803",
+                       
+                       T ~ ubigeo)
+  ) %>% 
+  group_by(ano_prc,ubigeo,distrito_ejecutora_nombre) %>% 
+  summarise(total_millones = sum(monto_acreditado)/1000000) %>% 
+  
+  ungroup()
+  
+  # PENDIENTE SEGUIR LIMPIANDO LOS UBIGEOS******
+
+table(transf_mef_loreto_suma$ubigeo,transf_mef_loreto_suma$ano_prc)
+
+
+transf_mef_loreto_suma %>% 
+  filter(ano_prc == 2014) %>% view()
+
+
+
 
