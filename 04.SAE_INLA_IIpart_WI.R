@@ -15,8 +15,10 @@ data("Peru")
 distritos<- Peru %>% filter(dep=="LORETO") %>% select(ubigeo,geometry)
 
 # working data
-wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% as_tibble() %>% 
-  mutate(ubigeo = as.character(ubigeo))
+wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% 
+  as_tibble() %>% 
+  mutate(ubigeo = as.character(ubigeo)) %>% 
+  left_join(aux_data)
 
 # Work begins on the variable wealth index (hv270), recategorized as:belongs to 
 # quintile 1 or 2 (1) and is in the 3rd or higher (0).
@@ -165,7 +167,7 @@ model_fit5spat <- inla(
 summary(model_fit5spat)
 
 model_fit2spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 +
+  formula = cases_number ~ 1 + pc1 + pc2 + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -178,6 +180,22 @@ model_fit2spat <- inla(
 )
 
 summary(model_fit2spat)
+
+
+model_fit2spat_new <- inla(
+  formula = cases_number ~ 1 + pc1 + pc2 + total_millones + nls_year_norm +
+    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
+    f(year, model = "ar1"),                       # efecto temporal
+  
+  data = wi_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+)
+
+summary(model_fit2spat_new)
 
 # Model accuracy ----
 
@@ -278,13 +296,15 @@ fit8_spat = (model_fit8spat$summary.fitted.values$mean)
 fit10_spat = (model_fit10spat$summary.fitted.values$mean)
 fit5_spat = (model_fit5spat$summary.fitted.values$mean)
 fit2_spat = (model_fit2spat$summary.fitted.values$mean)
+fit2_spat_new = model_fit2spat_new$summary.fitted.values$mean
 real = wi_censo_final2$cases_number
 
 
 fitted_vals  <-  list("pc10sp" = fit10_spat,
                       "pc8sp" = fit8_spat,
                       "pc5sp" = fit5_spat,
-                      "pc2sp" = fit2_spat) %>% 
+                      "pc2sp" = fit2_spat,
+                      "pc2new" = fit2_spat_new) %>% 
   as.data.frame() %>% 
   gather(key = "modelo", value = "fit") %>% 
   group_by(modelo) %>% 
@@ -331,7 +351,7 @@ distritos %>%
   filter(.metric=="smape" & modelo %in% c("pc5","pc5sp",
                                           "pc10","pc10sp",
                                           "pc8","pc8sp",
-                                          "pc2","pc2sp")) %>% 
+                                          "pc2","pc2sp","pc2new")) %>% 
   ggplot() +
   geom_sf(aes(fill=.estimate),lwd=0.1) +
   scale_fill_distiller(palette="Reds",direction=1,name="smape") +

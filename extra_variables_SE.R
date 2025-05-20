@@ -32,7 +32,7 @@ get_censo_edu <- function(urls) {
 
 
 direccion<-c(
-  "https://escale.minedu.gob.pe/documents/10156/c94c8471-173f-449e-baca-b0b226acd61d", # 2010,
+"https://escale.minedu.gob.pe/documents/10156/c94c8471-173f-449e-baca-b0b226acd61d", # 2010,
 "https://escale.minedu.gob.pe/documents/10156/0dca4201-c2e6-4fbe-aca0-775956638540", # 2011
 "https://escale.minedu.gob.pe/documents/10156/b12f6293-3029-4cc3-9504-eff8ca224485", # 2012
 "https://escale.minedu.gob.pe/documents/10156/04be227c-ca6d-4a8b-80d0-6114080f1889", # 2013
@@ -48,7 +48,7 @@ direccion<-c(
   
 
 edu_minedu<-
-  map(.x = leer_dbf_desde_zips(urls =direccion),
+  map(.x = get_censo_edu(urls =direccion),
     .f = ~ .x %>%
       clean_names() %>% 
       mutate(
@@ -86,6 +86,10 @@ edu_minedu_year<-
      .f = ~ .x %>% mutate(year = .y))
 
 
+referencia <- edu_minedu_year %>%
+  filter(ubigeo == "160109") %>%
+  transmute(year, ref_total_dist_mat = total_dist_mat / 3)
+
 edu_minedu_year<-
   edu_minedu_year %>% 
   mutate(
@@ -102,7 +106,7 @@ edu_minedu_year<-
   
   group_by(year) %>% 
   mutate(
-    total_dist_mat = round(ifelse(is.na(total_dist_mat), 
+    edu_dist_mat = round(ifelse(is.na(total_dist_mat), 
                                   total_dist_mat[ubigeo=="160109"]/3,total_dist_mat))
     # supuesto: los distritros 1608XX creados a partir de 2014, asigarle el valor de 160109 entre 3
   ) %>% 
@@ -110,7 +114,7 @@ edu_minedu_year<-
   filter(ubigeo!=160109)
 
 
-# 2. trasnferencia de fondos a los gobiernos
+# 2. Transferencia de fondos a los gobiernos ----
 
 library(tidyverse)
 library(janitor)
@@ -154,19 +158,34 @@ transf_mef_loreto_suma<-
                        
                        T ~ ubigeo)
   ) %>% 
-  group_by(ano_prc,ubigeo,distrito_ejecutora_nombre) %>% 
+  rename(
+    year = ano_prc
+  ) %>% 
+  full_join(distritos_years) %>% 
+
+  group_by(year,ubigeo,distrito_ejecutora_nombre) %>% 
   summarise(total_millones = sum(monto_acreditado)/1000000) %>% 
   
-  ungroup()
-  
-  # PENDIENTE SEGUIR LIMPIANDO LOS UBIGEOS******
+  group_by(year) %>% 
 
-table(transf_mef_loreto_suma$ubigeo,transf_mef_loreto_suma$ano_prc)
+  mutate(
+    total_millones = round(ifelse(ubigeo == '160801' | ubigeo == '160802' | ubigeo == '160804', 
+                                  total_millones[ubigeo=="160109"]/3,total_millones))
+    # supuesto: los distritros 1608XX creados a partir de 2014, asigarle el valor de 160109 entre 3
+  ) %>% 
+  filter(ubigeo != "160109")
 
 
-transf_mef_loreto_suma %>% 
-  filter(ano_prc == 2014) %>% view()
+# 3. VIIRS - Loreto (revisar) ---- 
 
+viirs_loreto<-read.csv("./data/aux_data/nightlights.csv") %>% rename(ubigeo = iddist) %>% mutate(ubigeo = as.character(ubigeo))
+
+# 4. merge datasets
+aux_data<-transf_mef_loreto_suma %>% 
+  left_join(viirs_loreto) %>% 
+  left_join(edu_minedu_year)
+
+write.csv(aux_data, "./data/aux_data/aux_data.csv", row.names = F)
 
 
 

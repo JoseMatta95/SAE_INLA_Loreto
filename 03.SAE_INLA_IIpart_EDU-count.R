@@ -8,9 +8,11 @@ library(INLA)
 library(car)
 library(yardstick)
 library(gt)
+library(viridis)
 
 data("Peru")
 distritos<- Peru %>% filter(dep=="LORETO") %>% select(ubigeo,geometry)
+aux_data<- read.csv("./data/aux_data/aux_data.csv") %>% mutate(ubigeo = as.character(ubigeo))
 # data de trabajo
 edu_censo_final<- read.csv("./data/edu_censo_final_recat.csv") %>% as_tibble() %>% mutate(ubigeo = as.character(ubigeo))
 
@@ -26,7 +28,32 @@ wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% as_tibble() %>%
 
 # INLA - Education ----
 
-## HV109_recat (transformed variable)
+## adding auxiliary data
+
+edu_censo_final<-
+  edu_censo_final %>% 
+  left_join(aux_data)
+
+## HV109 count
+
+## Adding total population to the dataset (using malaria incidence data processed in the main repo)
+
+pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
+  select(year,iddist,pop_landscan) %>% 
+  rename(ubigeo = iddist) %>% 
+  mutate(
+    ubigeo = as.character(ubigeo)
+  )
+
+edu_censo_final2<-
+  edu_censo_final %>% 
+  #select(year,ubigeo,hv270_recat,hv270_recat_cor) %>% 
+  inner_join(pop_dist) %>% 
+  mutate(
+    pop_landscan = round(pop_landscan),
+    cases_number = round(hv109_recat_cor*pop_landscan)
+  )
+
 
 # Spatial component
 loreto.dist <- poly2nb(distritos)
@@ -34,37 +61,83 @@ w.loreto <- nb2mat(loreto.dist, style = "W")
 
 # fit models ----
 
+## comparing family: binomial vs poisson vs negative binomial
+
+model_binom <- inla(
+  formula = cases_number ~ 1 + 
+    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
+    f(year, model = "ar1"),                       # efecto temporal
+  
+  data = edu_censo_final2,
+  family = "binomial",
+  Ntrials = pop_landscan,
+  
+  control.predictor = list(compute = TRUE, link = 1),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+)
+
+summary(model_binom)
+
+
+model_poisson <- inla(
+  formula = cases_number ~ 1 + 
+    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
+    f(year, model = "ar1"),                       # efecto temporal
+  
+  data = edu_censo_final2,
+  family = "poisson",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+)
+
+summary(model_poisson)
+
+model_nb <- inla(
+  formula = cases_number ~ 1 + 
+    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
+    f(year, model = "ar1"),                       # efecto temporal
+  
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+)
+
+summary(model_nb) # The negative binomial family was chosen.
+
+# fit models (2)
+
 modelo_fh8_spatial <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
-    pc6 + pc7 + pc8 +
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+ pc6 + pc7 + pc8 + 
     f(id.sp, model = "bym", graph = w.loreto)+
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
+
 summary(modelo_fh8_spatial)
 
 modelo_fh8 <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
     pc6 + pc7 + pc8 +
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -72,17 +145,15 @@ summary(modelo_fh8)
 
 modelo_fh10_spatial <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
     pc6 + pc7 + pc8 + pc9 + pc10 + f(id.sp, model = "bym", graph = w.loreto)+
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -90,18 +161,15 @@ summary(modelo_fh10_spatial)
 
 modelo_fh10 <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
     pc6 + pc7 + pc8 + pc9 + pc10+
-    f(year, model = "ar1")
-    ,
+    f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -110,17 +178,15 @@ summary(modelo_fh10)
 
 modelo_fh5_spatial <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 +
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 +
     f(id.sp, model = "bym", graph = w.loreto)+
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -128,16 +194,14 @@ summary(modelo_fh5_spatial)
 
 modelo_fh5 <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
+  formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -145,16 +209,14 @@ summary(modelo_fh5)
 
 modelo_fh2 <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 +
+  formula =  cases_number ~ 1 + pc1 + pc2 +
     f(year, model = "ar1"),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
@@ -163,36 +225,51 @@ summary(modelo_fh2)
 
 modelo_fh2_spatial <- inla(
   
-  formula =  hv109_recat_cor_logit ~ 1 + pc1 + pc2 +
+  formula =  cases_number ~ 1 + pc1 + pc2 +
     f(year, model = "ar1") +
     f(id.sp, model = "bym", graph = w.loreto),
   
-  data = edu_censo_final,
-  family = "gaussian",
-  control.family = list(
-    hyper = list(prec=list(fixed=T))
-  ),
-  scale = edu_censo_final$se_hv109_recat_cor,  # varianza logit como pesos
-  control.predictor = list(compute = TRUE),
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, cpo = TRUE)
 )
 
 summary(modelo_fh2_spatial)
+
+modelo_fh2_spatial_new <- inla(
+  
+  formula =  cases_number ~ 1 + pc1 + pc2 +  nls_year_norm +
+    f(year, model = "ar1") +
+    f(id.sp, model = "bym", graph = w.loreto),
+  
+  data = edu_censo_final2,
+  family = "nbinomial",
+  offset = log(pop_landscan),  
+  
+  control.predictor = list(compute = TRUE, link = 1),
+  control.compute = list(dic = TRUE, cpo = TRUE)
+)
+
+summary(modelo_fh2_spatial_new)
 
 # Model accuracy ----
 
 distritos_sf_predict<-
   edu_censo_final %>% 
   mutate(
-    fit8 = plogis(modelo_fh8$summary.fitted.values$mean),
-    fit8_spat = plogis(modelo_fh8_spatial$summary.fitted.values$mean),
-    fit10 = plogis(modelo_fh10$summary.fitted.values$mean),
-    fit10_spat = plogis(modelo_fh10_spatial$summary.fitted.values$mean),
-    fit5 = plogis(modelo_fh5$summary.fitted.values$mean),
-    fit5_spat = plogis(modelo_fh5_spatial$summary.fitted.values$mean),
-    fit2_spatial = plogis(modelo_fh2_spatial$summary.fitted.values$mean),
-    fit2 = plogis(modelo_fh2$summary.fitted.values$mean),
-    real_hv109_recat = plogis(edu_censo_final$hv109_recat_cor_logit)
+    fit8 = (modelo_fh8$summary.fitted.values$mean),
+    fit8_spat = (modelo_fh8_spatial$summary.fitted.values$mean),
+    fit10 = (modelo_fh10$summary.fitted.values$mean),
+    fit10_spat = (modelo_fh10_spatial$summary.fitted.values$mean),
+    fit5 = (modelo_fh5$summary.fitted.values$mean),
+    fit5_spat = (modelo_fh5_spatial$summary.fitted.values$mean),
+    fit2_spatial = (modelo_fh2_spatial$summary.fitted.values$mean),
+    fit2 = (modelo_fh2$summary.fitted.values$mean),
+    fit2_new = (modelo_fh2_spatial_new$summary.fitted.values$mean),
+    real_cases = (edu_censo_final2$cases_number)
   ) %>% 
   left_join(distritos) %>% 
   st_as_sf()
@@ -202,7 +279,8 @@ map.direct_est <-
   filter(year == 2020) %>% 
   ggplot()+
   geom_sf(data = distritos)+
-  geom_sf(aes(fill=real_hv109_recat))+
+  geom_sf(aes(fill=real_cases))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -227,6 +305,7 @@ map.15 <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit8))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -237,6 +316,7 @@ map.15spat <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit8_spat))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -247,6 +327,7 @@ map.10 <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit10))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -258,6 +339,7 @@ map.10spat <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit10_spat))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -269,6 +351,7 @@ map.5 <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit5))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -279,6 +362,7 @@ map.5spat<-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit5_spat))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -290,6 +374,7 @@ map.2 <-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit2))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -300,6 +385,7 @@ map.2spat<-
   ggplot()+
   geom_sf(data = distritos)+
   geom_sf(aes(fill=fit2_spatial))+
+  scale_fill_viridis(direction = -1,option = "rocket")+
   theme(
     legend.position = "bottom"
   )
@@ -334,15 +420,16 @@ distritos_sf_predict %>%
 
 ## Performance metrics ----
 
-fit8 <- plogis(modelo_fh8$summary.fitted.values$mean)
-fit8_spat <- plogis(modelo_fh8_spatial$summary.fitted.values$mean)
-fit10 <- plogis(modelo_fh10$summary.fitted.values$mean)
-fit10_spat <- plogis(modelo_fh10_spatial$summary.fitted.values$mean)
-fit5 <- plogis(modelo_fh5$summary.fitted.values$mean)
-fit5_spat <- plogis(modelo_fh5_spatial$summary.fitted.values$mean)
-fit2 <- plogis(modelo_fh2$summary.fitted.values$mean)
-fit2_spat <- plogis(modelo_fh2_spatial$summary.fitted.values$mean)
-estimacion_real <- plogis(edu_censo_final$hv109_recat_cor_logit)
+fit8 <- (modelo_fh8$summary.fitted.values$mean)
+fit8_spat <- (modelo_fh8_spatial$summary.fitted.values$mean)
+fit10 <- (modelo_fh10$summary.fitted.values$mean)
+fit10_spat <- (modelo_fh10_spatial$summary.fitted.values$mean)
+fit5 <- (modelo_fh5$summary.fitted.values$mean)
+fit5_spat <- (modelo_fh5_spatial$summary.fitted.values$mean)
+fit2 <- (modelo_fh2$summary.fitted.values$mean)
+fit2_spat <- (modelo_fh2_spatial$summary.fitted.values$mean)
+fit2_new <- (modelo_fh2_spatial_new$summary.fitted.values$mean)
+estimacion_real <- (edu_censo_final2$cases_number)
 
 
 fitted_vals  <-  list("pc10" = fit10,
@@ -352,7 +439,8 @@ fitted_vals  <-  list("pc10" = fit10,
                       "pc5" = fit5,
                       "pc5sp" = fit5_spat,
                       "pc2" = fit2,
-                      "pc2sp" = fit2_spat) %>% 
+                      "pc2sp" = fit2_spat,
+                      "pc2new" = fit2_new) %>% 
   as.data.frame() %>% 
   gather(key = "modelo", value = "fit") %>% 
   group_by(modelo) %>% 
@@ -388,17 +476,17 @@ tbl.yrd.full %>%
       cell_text(weight = "bold")
     ),
     locations = cells_body(
-      rows = modelo %in% c("pc2", "pc2sp")
+      rows = modelo %in% c("pc5sp", "pc2sp","pc2new")
     )
   )
 
 ### mapping the performance metrics
 distritos %>% 
   inner_join(tbl.yrd.dist) %>% 
-  filter(.metric=="smape" & modelo %in% c("pc5","pc5sp",
+  filter(.metric=="mae" & modelo %in% c("pc5","pc5sp",
                                           "pc10","pc10sp",
                                           "pc8","pc8sp",
-                                          "pc2","pc2sp")) %>% 
+                                          "pc2","pc2sp","pc2new")) %>% 
   ggplot() +
   geom_sf(aes(fill=.estimate),lwd=0.1) +
   scale_fill_distiller(palette="Reds",direction=1,name="smape") +
@@ -415,13 +503,15 @@ cpo.10 <--2*sum(log(modelo_fh10$cpo$cpo),na.rm = T)
 cpo.10cp.sp <--2*sum(log(modelo_fh10_spatial$cpo$cpo),na.rm = T)
 cpo.2cp <--2*sum(log(modelo_fh2$cpo$cpo),na.rm = T)
 cpo.2cp.sp <--2*sum(log(modelo_fh2_spatial$cpo$cpo),na.rm = T)
+cpo.2cp.sp.new <- -2*sum(log(modelo_fh2_spatial_new$cpo$cpo),na.rm = T)
 
 data.cpo  <-  list("modelo5" = cpo.5cp,
                    "modelo5spat" = cpo.5.cp.sp,
                    "modelo10" = cpo.10,
                    "modelo10spat" = cpo.10cp.sp,
                    "modelo2" = cpo.2cp,
-                   "modelo2spat" = cpo.2cp.sp) %>% 
+                   "modelo2spat" = cpo.2cp.sp,
+                   "modelo2_new" = cpo.2cp.sp.new) %>% 
   as.data.frame()
 
 data.cpo %>% 
@@ -434,48 +524,44 @@ data.cpo %>%
 ## Visualization ---- 
 
 # real values of edu level
-distritos_sf_predict %>% 
-  select(year,ubigeo,se_hv109_recat_cor,real_hv109_recat,fit8:fit2) %>% 
+graficos<-
+  distritos_sf_predict %>% 
+  st_drop_geometry() %>% 
+  select(year,ubigeo,real_cases,fit8:fit2_new) %>% 
+  pivot_longer(cols = fit8:fit2_new) %>% 
+  
+  group_by(name) %>% 
+  nest() %>% 
+  
   mutate(
-    ubigeo2 = ifelse(is.na(real_hv109_recat),paste0(ubigeo,"*"),ubigeo),
-    real_sehv109 = plogis(se_hv109_recat_cor)
-  ) %>% 
-  
-  ggplot(aes(x = real_hv109_recat, y = ubigeo2))+
-  
-  geom_point()+
-  geom_errorbar(aes(xmin = real_hv109_recat - (1.96*real_sehv109), xmax = real_hv109_recat + (1.96*real_sehv109)),alpha = 0.5)+
-  facet_wrap(~year)
-
-
-# fitted values of edu level
-
-modelos <- list(
-  # modelo_fh8 = modelo_fh8,
-  # modelo_fh8_spatial = modelo_fh8_spatial,
-  # modelo_fh10 = modelo_fh10,
-  # modelo_fh10_spatial = modelo_fh10_spatial,
-  modelo_fh5 = modelo_fh5,
-  modelo_fh5_spatial = modelo_fh5_spatial,
-  modelo_fh2 = modelo_fh2,
-  modelo_fh2_spatial = modelo_fh2_spatial
-)
-
-resultados <- imap_dfr(modelos, ~{
-  data.frame(
-    year = edu_censo_final$year,
-    ubigeo = edu_censo_final$ubigeo,
-    mean = .x$summary.fitted.values$mean,
-    lower = .x$summary.fitted.values$`0.025quant`,
-    upper = .x$summary.fitted.values$`0.975quant`,
-    modelo = .y
+    data_graph = map(.x = data,
+                     .f = ~.x %>% pivot_longer(cols = c(real_cases,value))),
+    
+    graph = map2(.x = data_graph, .y = name,
+                .f = ~.x %>% ggplot(aes(x = value, y=ubigeo, col = name))+
+                  geom_point()+
+                  geom_line(aes(group = ubigeo))+
+                  facet_wrap(~year, scales = "free")+
+                  ggtitle(name))
   )
-}) %>% 
-  mutate(across(.cols = c(mean,lower,upper), .f = ~plogis(.x)))
 
-resultados %>% 
-  ggplot(aes(x = mean, y = ubigeo, col = modelo))+
-  geom_point()+
-  geom_errorbar(aes(xmin = lower, xmax = upper))+
-  facet_grid(modelo~year)
-
+graficos$graph[[9]]
+  
+  # seguir generando
+  
+  arrange(year,ubigeo,name) %>% 
+  group_by(year, ubigeo) %>% 
+  mutate(grupo = row_number()) %>%
+  ungroup() %>% 
+  
+  group_by(year, ubigeo) %>%
+  # Repetir el grupo del fit en el real_cases correspondiente
+  mutate(grupo = min(grupo[name != "real_cases"])) %>%
+  ungroup()
+  
+  ggplot(aes(x = value, ubigeo))+
+  geom_point(aes(col = name))+
+  geom_line(aes(group = ubigeo))+
+  
+  facet_grid(grupo~year)
+  
