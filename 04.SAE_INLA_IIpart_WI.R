@@ -13,6 +13,7 @@ library(viridis)
 #shapefiles
 data("Peru")
 distritos<- Peru %>% filter(dep=="LORETO") %>% select(ubigeo,geometry)
+aux_data<- read.csv("./data/aux_data/aux_data.csv") %>% mutate(ubigeo = as.character(ubigeo))
 
 # working data
 wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% 
@@ -310,7 +311,7 @@ fitted_vals  <-  list("pc10sp" = fit10_spat,
   group_by(modelo) %>% 
   mutate(
     actual = real,
-    ubigeo = as.character(edu_censo_final$ubigeo)
+    ubigeo = as.character(wi_censo_final$ubigeo)
   )
 
 #### Metrics ----

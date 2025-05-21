@@ -45,6 +45,7 @@ pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>%
     ubigeo = as.character(ubigeo)
   )
 
+
 edu_censo_final2<-
   edu_censo_final %>% 
   #select(year,ubigeo,hv270_recat,hv270_recat_cor) %>% 
@@ -258,7 +259,7 @@ summary(modelo_fh2_spatial_new)
 # Model accuracy ----
 
 distritos_sf_predict<-
-  edu_censo_final %>% 
+  edu_censo_final2 %>% 
   mutate(
     fit8 = (modelo_fh8$summary.fitted.values$mean),
     fit8_spat = (modelo_fh8_spatial$summary.fitted.values$mean),
@@ -398,10 +399,10 @@ cowplot::plot_grid(map.direct_est,map.5,map.5spat
 
 ## Comparison DE vs Pred. SAE ----
 distritos_sf_predict %>% 
-  select(year,real_hv109_recat,fit2,fit2_spatial,fit10,fit10_spat,fit5,fit5_spat) %>% 
+  select(year,cases_number,fit2,fit2_spatial,fit10,fit10_spat,fit5,fit5_spat) %>% 
   st_drop_geometry() %>%
-  filter(!is.na(real_hv109_recat)) %>%
-  rename(directo = real_hv109_recat) %>%
+  filter(!is.na(cases_number)) %>%
+  rename(directo = cases_number) %>%
   pivot_longer(cols = starts_with("fit"),
                names_to = "modelo",
                values_to = "predicho") %>%
@@ -539,13 +540,13 @@ graficos<-
     
     graph = map2(.x = data_graph, .y = name,
                 .f = ~.x %>% ggplot(aes(x = value, y=ubigeo, col = name))+
-                  geom_point()+
+                  geom_point(alpha = 0.5)+
                   geom_line(aes(group = ubigeo))+
                   facet_wrap(~year, scales = "free")+
                   ggtitle(name))
   )
 
-graficos$graph[[9]]
+graficos$graph[[8]]
   
   # seguir generando
   
@@ -564,4 +565,14 @@ graficos$graph[[9]]
   geom_line(aes(group = ubigeo))+
   
   facet_grid(grupo~year)
+  
+  
+  # calculation proportions with cases predicted
+  
+  distritos_sf_predict %>% 
+    select(real_cases,fit2_spatial,fit2_new,fit5_spat,pop_landscan) %>% 
+    mutate(
+      across(.cols = c(real_cases:fit5_spat), .f= ~round(.x/pop_landscan))
+    )
+  
   
