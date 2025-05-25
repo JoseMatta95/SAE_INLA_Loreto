@@ -121,7 +121,7 @@ summary(model_nb) # The negative binomial family was chosen.
 
 # fit models (2)
 model_fit10spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
     pc6 + pc7 + pc8 + pc9 + pc10 +
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
@@ -137,8 +137,8 @@ model_fit10spat <- inla(
 summary(model_fit10spat)
 
 model_fit8spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 +
-    pc6 + pc7 + pc8 +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
+    pc6 + pc7 + pc8 + total_millones + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -153,7 +153,7 @@ model_fit8spat <- inla(
 summary(model_fit8spat)
 
 model_fit5spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -184,7 +184,7 @@ summary(model_fit2spat)
 
 
 model_fit2spat_new <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + total_millones + nls_year_norm +
+  formula = cases_number ~ 1 + pc1 + pc2 + total_millones + nls_year_norm + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -207,6 +207,8 @@ distritos_sf_predict<-
     fit10_spat = (model_fit10spat$summary.fitted.values$mean),
     fit5_spat = (model_fit5spat$summary.fitted.values$mean),
     fit2_spat = (model_fit2spat$summary.fitted.values$mean),
+    fit2_new = model_fit2spat_new$summary.fitted.values$mean,
+    real_cases = (wi_censo_final2$cases_number)
   ) %>% 
   left_join(distritos) %>% 
   st_as_sf()
@@ -272,7 +274,7 @@ cowplot::plot_grid(map.direct_est,map2sp,map5sp,map8sp,map10sp)
 
 ## Comparison DE vs Pred. SAE ----
 distritos_sf_predict %>% 
-  select(year,cases_number,fit2_spat,fit5_spat,fit8_spat,fit10_spat) %>% 
+  select(year,cases_number,fit2_new,fit2_spat,fit5_spat,fit8_spat,fit10_spat) %>% 
   st_drop_geometry() %>%
   filter(!is.na(cases_number)) %>%
   rename(directo = cases_number) %>%
@@ -381,3 +383,115 @@ data.cpo %>%
                values_to = "CPO")  %>% 
   gt() %>%
   tab_header(title = md("LOO-CV")) 
+
+
+
+## Visualization ---- 
+
+# real values of edu level
+graficos<-
+  distritos_sf_predict %>% 
+  st_drop_geometry() %>% 
+  select(year,ubigeo,real_cases,fit2_new,fit2_spat,
+         fit5_spat,fit8_spat,fit10_spat) %>% 
+  pivot_longer(cols = fit2_new:fit10_spat) %>% 
+  mutate(
+    #ubigeo = as.numeric(ubigeo)
+  ) %>% 
+  
+  group_by(name) %>% 
+  nest() %>% 
+  
+  mutate(
+    data_graph = map(.x = data,
+                     .f = ~.x %>% pivot_longer(cols = c(real_cases,value))),
+    
+    graph = map2(.x = data_graph, .y = name,
+                 .f = ~.x %>% ggplot(aes(x = value, y=ubigeo, col = name))+
+                   geom_point(alpha = 0.5)+
+                   geom_line(aes(group = ubigeo))+
+                   facet_wrap(~year, scales = "free")+
+                   ggtitle(name))
+  )
+
+graficos$graph[[1]]
+
+
+# calculation proportions with cases predicted
+
+prop_sae_predict_wi<-
+  distritos_sf_predict %>% 
+  select(year,ubigeo,pop_landscan,real_cases,fit2_new,fit2_spat,
+         fit5_spat,fit8_spat,fit10_spat,geometry) %>% 
+  mutate(
+    across(.cols = c(real_cases:fit10_spat), .f=~.x/pop_landscan)
+  )
+
+
+# prop_sae_predict_wi %>% 
+#   pivot_longer(cols = real_cases:fit10_spat) %>% 
+#   mutate(
+#     name = factor(name, levels = c("real_cases", "fit2_new", 
+#                                    "fit2_spat", "fit5_spat", 
+#                                    "fit8_spat", "fit10_spat"))
+#   ) %>% 
+#   
+#   ggplot()+
+#   geom_sf(aes(fill = value)) +
+#   scale_fill_viridis(direction = -1,option = "rocket") +
+#   facet_grid(name~year)
+
+
+# Point and interval estimates of proportions (INLA)
+
+modelos <- list( # lista para trabajar en bloque
+ 
+  modelo_fh8_spatial = model_fit10spat,
+  modelo_fh10_spatial = model_fit8spat,
+  modelo_fh5_spatial = model_fit5spat,
+  modelo_fh2_spatial = model_fit2spat,
+  modelo_fh2_new = model_fit2spat_new
+)
+
+
+resultados_SAE_loreto_wi <- 
+  imap_dfr(modelos, ~{ # formato long de las estimaciones y los IC de cada modelo distrito-año
+    data.frame(
+      year = wi_censo_final2$year,
+      ubigeo = wi_censo_final2$ubigeo,
+      mean = .x$summary.fitted.values$mean,
+      lower = .x$summary.fitted.values$`0.025quant`,
+      upper = .x$summary.fitted.values$`0.975quant`,
+      modelo = .y
+    )
+  }) 
+
+#write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
+
+resultados_SAE_loreto_wi %>% 
+  ggplot(aes(x = mean, y = ubigeo, col = modelo))+
+  geom_point()+
+  geom_errorbar(aes(xmin = lower, xmax = upper))+
+  facet_grid(modelo~year)
+
+
+# accuracy metris vs population
+
+tbl.yrd.dist %>% 
+  full_join(
+    pop_dist %>% 
+      group_by(ubigeo) %>% 
+      summarise(pop_model = sum(pop_landscan))
+  ) %>% 
+  filter(
+    modelo %in% c("pc2new","pc5sp","pc8sp","pc10sp")
+  ) %>% 
+  
+  ggplot(aes(x = .estimate, y = (pop_model), col = modelo))+
+  geom_point(aes(shape = modelo), alpha = .5, size = 3)+
+  geom_line(aes(group = ubigeo)) +
+  
+  coord_flip() +
+  
+  facet_wrap(~.metric, scales = "free", ncol = 1)
+

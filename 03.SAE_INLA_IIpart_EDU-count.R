@@ -588,7 +588,9 @@ modelos <- list( # lista para trabajar en bloque
   modelo_fh2_new = modelo_fh2_spatial_new
 )
 
-resultados <- imap_dfr(modelos, ~{ # formato long de las estimaciones y los IC de cada modelo distrito-año
+
+resultados_SAE_loreto_edu <- 
+  imap_dfr(modelos, ~{ # formato long de las estimaciones y los IC de cada modelo distrito-año
   data.frame(
     year = edu_censo_final$year,
     ubigeo = edu_censo_final$ubigeo,
@@ -599,102 +601,33 @@ resultados <- imap_dfr(modelos, ~{ # formato long de las estimaciones y los IC d
   )
 }) 
 
+write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
 
-resultados %>% 
+resultados_SAE_loreto_edu %>% 
   ggplot(aes(x = mean, y = ubigeo, col = modelo))+
   geom_point()+
   geom_errorbar(aes(xmin = lower, xmax = upper))+
   facet_grid(modelo~year)
 
 
-# bottom-up? benchmarking? validación por agregación?
+# accuracy metris vs population
 
-# 1. Estimates will be calculated for each year for the whole Loreto region, 2. The district-level estimates 
-# by year will be aggregated to the department-year level, 3. It will be verified if the direct estimate 
-# is on the confidence interval (CI) of the SAE-INLA model estimates.
-
-# The logic is that the true value is expected to lie within the CI of the model/design-based estimate.
-# ENDES assumes that the true value lies within its own CI. For the SAE-INLA models, we would expect 
-# ENDES estimates to fall within the model-generated CIs.
-
-
-# 1. Estimates will be calculated for each year for the whole Loreto region
-
-data_final_nest<-
-  wi_edu_2010_2020 %>% 
-  group_by(year) %>% 
-  nest() %>% 
-  mutate(
-    svydesign_endes= map(.x=data,
-                         .f = ~svydesign(ids = ~hv001, strata = ~hv022, 
-                                         weights = ~hv005, data = .x, nest = T)),
-    
-    wi_directa = map(.x = svydesign_endes,
-                     .f = ~svyby(~hv270, ~hv023, design = .x, svymean, keep.var = T)),
-    
-    edu_directa = map(.x = svydesign_endes,
-                      .f = ~svyby(~hv109_recat, ~hv023, design = .x, svymean, keep.var = T)))
-
-
-# 2. The district-level estimates by year will be aggregated to the department-year level
-
-predict_sae_loreto<-
-  resultados %>% 
-  full_join(pop_dist) %>% # total population for calculate proportions
-  group_by(year,modelo) %>% 
-  summarise(
-    total_loreto = sum(pop_landscan),
-    mean_loreto = sum(mean),
-    lower_loreto = sum(lower),
-    upper_loreto = sum(upper)
-  ) %>% 
-  mutate(
-    across(.cols = c(mean_loreto:upper_loreto), .f = ~.x/total_loreto)
-  )
-
-
-
-
-#3. It will be verified if the direct estimate is on the confidence interval (CI) of 
-# the SAE-INLA model estimates
-
-data_final_nest %>% 
-  select(year,edu_directa) %>% 
-  unnest(edu_directa) %>% 
-  ungroup() %>%
-  select(year,hv109_recat) %>% 
-  
-  full_join(predict_sae_loreto) %>% 
-  
-  mutate(
-    check = ifelse(hv109_recat > lower_loreto & hv109_recat<upper_loreto, "cumple", "no cumple")
+tbl.yrd.dist %>% 
+  full_join(
+pop_dist %>% 
+  group_by(ubigeo) %>% 
+  summarise(pop_model = sum(pop_landscan))
+) %>% 
+  filter(
+    modelo %in% c("pc2new","pc5sp","pc8sp","pc10sp")
   ) %>% 
   
-  ggplot()+
-  geom_pointrange(aes(x = modelo, y =mean_loreto,
-                      col = modelo, ymin = lower_loreto, ymax = upper_loreto))+
-  geom_point(aes(x = modelo, y = hv109_recat, shape = check), col = 'black', show.legend = F)+
+  ggplot(aes(x = .estimate, y = (pop_model), col = modelo))+
+  geom_point(aes(shape = modelo), alpha = .5, size = 3)+
+  geom_line(aes(group = ubigeo)) +
   
-  scale_shape_manual(
-    values = c(
-      "cumple" = 23, 
-      "no cumple" = 15)
-  ) +
+  coord_flip() +
   
-  coord_flip()+
-  facet_grid(rows = vars(year), switch = "y") +
-  
-  theme_minimal() +
-  
-  theme(
-    panel.grid.major=element_blank(),
-    panel.grid.minor=element_blank(),
-    axis.text.y=element_blank(),
-    axis.line=element_line(),
-    strip.placement = "outside",
-    axis.text.x=element_text(face="bold"),
-    strip.text.y = element_text(vjust = 1,size = 10,face="bold"))
-
-
+  facet_wrap(~.metric, scales = "free", ncol = 1)
 
 
