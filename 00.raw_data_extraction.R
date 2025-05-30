@@ -209,7 +209,7 @@ censo_hogar_dist<-
     across(.cols = c3_p1_1:c4_p1, .f = ~mean(.x,na.rm = T))
   )
 
-write.csv(censo_hogares, "./data processing/INLA_SAE/data/censo_2017/censo_hogar_2017.csv", row.names = F)
+#write.csv(censo_hogares, "./data processing/INLA_SAE/data/censo_2017/censo_hogar_2017.csv", row.names = F)
 
 censo_vivienda <- read_sav("../Google Drive/Mi unidad/censo2017_data/CPV2017_VIV.sav", 
                            col_select = c("ubigeo","area",'departamento','distrito',
@@ -221,7 +221,8 @@ censo_vivienda <- read_sav("../Google Drive/Mi unidad/censo2017_data/CPV2017_VIV
 censo_vivienda_dist<-
   censo_vivienda %>% 
   mutate(
-    c2_p11 = ifelse(c2_p11==1,0,1)
+    c2_p11 = ifelse(c2_p11==1,0,1),
+    area = ifelse(area==1,0,1)
   ) %>% 
   filter(!is.na(c2_p3)) %>% 
   dummy_cols(select_columns = c("c2_p1","c2_p3","c2_p4","c2_p5","c2_p6",
@@ -233,7 +234,7 @@ censo_vivienda_dist<-
   ) %>% 
   select(-(c2_p1:c2_p10))
 
-write.csv(censo_vivienda, "./data processing/INLA_SAE/data/censo_2017/censo_vivienda_2017.csv", row.names = F)
+#write.csv(censo_vivienda, "./data processing/INLA_SAE/data/censo_2017/censo_vivienda_2017.csv", row.names = F)
 
 censo_poblacion <- read_sav("../Google Drive/Mi unidad/censo2017_data/CPV2017_POB.sav", 
                             col_select = c("ubigeo","area",'departamento','distrito',
@@ -267,7 +268,7 @@ censo_poblacion_dist<-
     across(.cols = c5_p8_1:c5_p13_niv_recat_6, .f = ~mean(.x, na.rm=T))
   )
 
-write.csv(censo_poblacion, "./data processing/INLA_SAE/data/censo_2017/censo_poblacion_2017.csv", row.names = F)
+#write.csv(censo_poblacion, "./data processing/INLA_SAE/data/censo_2017/censo_poblacion_2017.csv", row.names = F)
 
 
 ### final dataset CENSO-distrito 2017 ----
@@ -279,7 +280,7 @@ censo_final_loreto_2017<-
   mutate(
     ubigeo = as.character(ubigeo)
   )
-write.csv(censo_final_loreto_2017, "./data/censo_2017/01.censo_final_loreto_2017.csv", row.names = F)
+#write.csv(censo_final_loreto_2017, "./data/censo_2017/01.censo_final_loreto_2017.csv", row.names = F)
 
 
 ## PCA

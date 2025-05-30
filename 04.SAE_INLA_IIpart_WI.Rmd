@@ -1,3 +1,15 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-05-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+
+```{r}
 library(tidyverse)
 library(janitor)
 library(sf)
@@ -9,58 +21,71 @@ library(car)
 library(yardstick)
 library(gt)
 library(viridis)
+```
 
-#shapefiles
+```{r}
 data("Peru")
 distritos<- Peru %>% filter(dep=="LORETO") %>% select(ubigeo,geometry)
 aux_data<- read.csv("./data/aux_data/aux_data.csv") %>% mutate(ubigeo = as.character(ubigeo))
 
+wi_edu_2010_2020<- read.csv("./data/wi_edu_2010_2020.csv")
+```
+
+
 # working data
+```{r}
 wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% 
   as_tibble() %>% 
   mutate(ubigeo = as.character(ubigeo)) %>% 
   left_join(aux_data)
+```
 
 # Work begins on the variable wealth index (hv270), recategorized as:belongs to 
 # quintile 1 or 2 (1) and is in the 3rd or higher (0).
-
+```{r}
 hist(wi_censo_final$hv270_recat) # no normal distribution
 hist(wi_censo_final$hv270_recat_cor)  # no normal distribution
 
 hist(wi_edu_2010_2020$hv271) # wi in continuous form. no normal distribution
+```
 
-# because neither has a normal distribution, even after transforming to the logit scale,
-# we explore other approaches (binomial, poisson, negative binomial).
 
-# for any of three options, we need:
-  # numerator: cases
-  # denominator: total population
-# we have the proportion of cases (direct estimation from ENDES) and total population
-# from LandScan database.
+Because neither has a normal distribution, even after transforming to the logit scale,
+we explore other approaches (binomial, poisson, negative binomial).
 
-# To obtain the numerator: 
+For any of three options, we need:
+  - numerator: cases
+  - denominator: total population
+ we have the proportion of cases (direct estimation from ENDES) and total population
+from LandScan database.
+
+To obtain the numerator: 
  ##proportion of cases * total population = estimated (hypothetical) number of cases
 
-# offset: log(total population)
+offset: log(total population)
 
-# Fit INLA ----
 
-## INLA - wealth index (hv207_recat) ----
-
+# Fit INLA 
+## INLA - wealth index (hv207_recat
+```{r}
 # Spatial component
 loreto.dist <- poly2nb(distritos)
 w.loreto <- nb2mat(loreto.dist, style = "W")
+```
 
-# fit models ----
-## Adding total population to the dataset (using malaria incidence data processed in the main repo)
-
+# fit models
+Adding total population to the dataset (using malaria incidence data processed in the main repo)
+```{r}
 pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
   select(year,iddist,pop_landscan) %>% 
   rename(ubigeo = iddist) %>% 
   mutate(
     ubigeo = as.character(ubigeo)
   )
+```
 
+
+```{r}
 wi_censo_final2<-
   wi_censo_final %>% 
   #select(year,ubigeo,hv270_recat,hv270_recat_cor) %>% 
@@ -69,9 +94,10 @@ wi_censo_final2<-
     pop_landscan = round(pop_landscan),
     cases_number = round(hv270_recat*pop_landscan)
   )
+```
 
-## comparing family: binomial vs poisson vs negative binomial
-
+## Comparing family: binomial vs poisson vs negative binomial
+```{r}
 model_binom <- inla(
   formula = cases_number ~ 1 + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
@@ -117,11 +143,13 @@ model_nb <- inla(
 )
 
 summary(model_nb) # The negative binomial family was chosen.
+```
 
 
-# fit models (2)
+# Fit models (2) 
+```{r}
 model_fit10spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     pc6 + pc7 + pc8 + pc9 + pc10 +
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
@@ -134,10 +162,12 @@ model_fit10spat <- inla(
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
 
-summary(model_fit10spat)
+```
 
+
+```{r}
 model_fit8spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     pc6 + pc7 + pc8 + total_millones + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
@@ -150,10 +180,12 @@ model_fit8spat <- inla(
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
 
-summary(model_fit8spat)
+```
 
+
+```{r}
 model_fit5spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + total_millones + nls_year_norm +
+  formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -165,10 +197,12 @@ model_fit5spat <- inla(
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
 
-summary(model_fit5spat)
+```
 
+
+```{r}
 model_fit2spat <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + 
+  formula = cases_number ~ 1 + pc1 + pc2 +
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -180,11 +214,12 @@ model_fit2spat <- inla(
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
 
-summary(model_fit2spat)
+```
 
 
+```{r}
 model_fit2spat_new <- inla(
-  formula = cases_number ~ 1 + pc1 + pc2 + total_millones + nls_year_norm + 
+  formula = cases_number ~ 1 + pc1 + pc2 + total_millones + total_dist_mat +
     f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
     f(year, model = "ar1"),                       # efecto temporal
   
@@ -195,11 +230,48 @@ model_fit2spat_new <- inla(
   control.predictor = list(compute = TRUE, link = 1),
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
+```
 
-summary(model_fit2spat_new)
+# Summary
 
-# Model accuracy ----
+```{r}
+model_metrics <- tibble(
+  Modelo = c("Modelo 10", "Modelo 8", "Modelo 5", "Modelo 2","modelo 2 new"),
+  DIC     = c(model_fit10spat$dic$dic, model_fit8spat$dic$dic, 
+              model_fit5spat$dic$dic, model_fit2spat$dic$dic,model_fit2spat_new$dic$dic),
+  pD      = c(model_fit10spat$dic$p.eff, model_fit8spat$dic$p.eff, 
+              model_fit5spat$dic$p.eff, model_fit2spat$dic$p.eff,model_fit2spat_new$dic$p.eff),
+  WAIC    = c(model_fit10spat$waic$waic, model_fit8spat$waic$waic, 
+              model_fit5spat$waic$waic, model_fit2spat$waic$waic,model_fit2spat_new$waic$waic),
+  pWAIC   = c(model_fit10spat$waic$p.eff, model_fit8spat$waic$p.eff, 
+              model_fit5spat$waic$p.eff, model_fit2spat$waic$p.eff,model_fit2spat_new$waic$p.eff),
+  logML   = c(model_fit10spat$mlik[1,1], model_fit8spat$mlik[1,1], 
+              model_fit5spat$mlik[1,1], model_fit2spat$mlik[1,1],model_fit2spat_new$mlik[1,1])
+)
+```
 
+
+```{r}
+model_metrics %>%
+  gt() %>%
+  tab_header(title = md("**Comparación de modelos INLA**")) %>%
+  fmt_number(columns = c(DIC, pD, WAIC, pWAIC, logML), decimals = 2) %>% 
+  
+  
+  tab_style(
+    style = list(
+      cell_fill(color = "#FFF3B0"),  # amarillo claro
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = Modelo %in% c("Modelo 2","Modelo 5")
+    )
+  )
+```
+
+
+# Model accuracy 
+```{r}
 distritos_sf_predict<-
   wi_censo_final2 %>% 
   mutate(
@@ -212,8 +284,10 @@ distritos_sf_predict<-
   ) %>% 
   left_join(distritos) %>% 
   st_as_sf()
+```
 
 
+```{r}
 map.direct_est <-
   distritos_sf_predict %>% 
   filter(year == 2010) %>% 
@@ -268,11 +342,15 @@ map10sp <-
   theme(
     #legend.position = "bottom"
   )
+```
 
+
+```{r}
 cowplot::plot_grid(map.direct_est,map2sp,map5sp,map8sp,map10sp)
-
+```
 
 ## Comparison DE vs Pred. SAE ----
+```{r}
 distritos_sf_predict %>% 
   select(year,cases_number,fit2_new,fit2_spat,fit5_spat,fit8_spat,fit10_spat) %>% 
   st_drop_geometry() %>%
@@ -292,9 +370,11 @@ distritos_sf_predict %>%
     subtitle = "Línea diagonal = ajuste perfecto"
   ) +
   theme_minimal()
+```
 
-## Performance metrics ----
 
+## Performance metrics 
+```{r}
 fit8_spat = (model_fit8spat$summary.fitted.values$mean)
 fit10_spat = (model_fit10spat$summary.fitted.values$mean)
 fit5_spat = (model_fit5spat$summary.fitted.values$mean)
@@ -315,7 +395,10 @@ fitted_vals  <-  list("pc10sp" = fit10_spat,
     actual = real,
     ubigeo = as.character(wi_censo_final$ubigeo)
   )
+```
 
+
+```{r}
 #### Metrics ----
 perform.metrics <- yardstick::metric_set(mae,mase,smape,rmse)
 perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
@@ -329,8 +412,12 @@ tbl.yrd.full <-  fitted_vals %>%
 tbl.yrd.dist <-  fitted_vals %>% 
   group_by(modelo,ubigeo) %>%
   perform.metrics.dist(truth = actual, estimate = fit)
+```
 
-## Table in-sample accuracy metrics ----
+
+
+## Table in-sample accuracy metrics
+```{r}
 tbl.yrd.full %>% 
   pivot_wider(id_cols = modelo,
               names_from = .metric,
@@ -343,12 +430,13 @@ tbl.yrd.full %>%
       cell_text(weight = "bold")
     ),
     locations = cells_body(
-      rows = modelo %in% c("pc2sp")
+      rows = modelo %in% c("pc2sp","pc5sp")
     )
   )
-
+```
 
 ### mapping the performance metrics
+```{r}
 distritos %>% 
   inner_join(tbl.yrd.dist) %>% 
   filter(.metric=="smape" & modelo %in% c("pc5","pc5sp",
@@ -362,32 +450,49 @@ distritos %>%
   theme_linedraw(base_size = 10) +
   theme(
     strip.text = element_text(face = "bold",size = 30),
-    legend.position = "bottom") 
+    legend.position = "bottom")
+```
 
-# cross validation ----
-
+# cross validation
+```{r}
 cpo.10cp.sp <- -2*sum(log(model_fit10spat$cpo$cpo),na.rm = T)
 cpo.8cp.sp <- -2*sum(log(model_fit8spat$cpo$cpo),na.rm = T)
 cpo.5cp.sp <- -2*sum(log(model_fit5spat$cpo$cpo),na.rm = T)
 cpo.2cp.sp <- -2*sum(log(model_fit2spat$cpo$cpo),na.rm = T)
+cpo.2cp.sp.new <- -2*sum(log(model_fit2spat_new$cpo$cpo),na.rm = T)
 
 data.cpo  <-  list("modelo10" = cpo.10cp.sp,
                    "modelo8" = cpo.8cp.sp,
                    "modelo5" = cpo.5cp.sp,
-                   "modelo2" = cpo.2cp.sp) %>% 
+                   "modelo2" = cpo.2cp.sp,
+                   "modelo2_new" = cpo.2cp.sp.new) %>% 
   as.data.frame()
+```
 
+
+```{r}
 data.cpo %>% 
   pivot_longer(cols=colnames(data.cpo),
                names_to = "model",
                values_to = "CPO")  %>% 
   gt() %>%
-  tab_header(title = md("LOO-CV")) 
+  tab_header(title = md("LOO-CV")) %>% 
+  
+  tab_style(
+    style = list(
+      cell_fill(color = "#FFF3B0"),  # amarillo claro
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = model %in% c("modelo5","modelo10")
+    )
+  )
 
 
+```
 
-## Visualization ---- 
-
+## Visualization
+```{r}
 # real values of edu level
 graficos<-
   distritos_sf_predict %>% 
@@ -413,12 +518,17 @@ graficos<-
                    facet_wrap(~year, scales = "free")+
                    ggtitle(name))
   )
+```
 
-graficos$graph[[1]]
+
+```{r}
+graficos$graph[[2]]
+```
+
 
 
 # calculation proportions with cases predicted
-
+```{r}
 prop_sae_predict_wi<-
   distritos_sf_predict %>% 
   select(year,ubigeo,pop_landscan,real_cases,fit2_new,fit2_spat,
@@ -440,10 +550,11 @@ prop_sae_predict_wi<-
 #   geom_sf(aes(fill = value)) +
 #   scale_fill_viridis(direction = -1,option = "rocket") +
 #   facet_grid(name~year)
+```
 
 
 # Point and interval estimates of proportions (INLA)
-
+```{r}
 modelos <- list( # lista para trabajar en bloque
  
   modelo_fh8_spatial = model_fit10spat,
@@ -466,17 +577,20 @@ resultados_SAE_loreto_wi <-
     )
   }) 
 
-#write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
+ write.csv(resultados_SAE_loreto_wi, "./data/final_data/resultados_SAE_loreto_wi.csv", row.names = F )
+```
 
+
+```{r}
 resultados_SAE_loreto_wi %>% 
   ggplot(aes(x = mean, y = ubigeo, col = modelo))+
   geom_point()+
   geom_errorbar(aes(xmin = lower, xmax = upper))+
   facet_grid(modelo~year)
-
+```
 
 # accuracy metris vs population
-
+```{r}
 tbl.yrd.dist %>% 
   full_join(
     pop_dist %>% 
@@ -484,14 +598,15 @@ tbl.yrd.dist %>%
       summarise(pop_model = sum(pop_landscan))
   ) %>% 
   filter(
-    modelo %in% c("pc2new","pc5sp","pc8sp","pc10sp")
+    modelo %in% c("pc2sp","pc2new","pc5sp","pc8sp","pc10sp")
   ) %>% 
   
-  ggplot(aes(x = .estimate, y = (pop_model), col = modelo))+
+  ggplot(aes(x = .estimate, y = log(pop_model), col = modelo))+
   geom_point(aes(shape = modelo), alpha = .5, size = 3)+
   geom_line(aes(group = ubigeo)) +
   
   coord_flip() +
   
   facet_wrap(~.metric, scales = "free", ncol = 1)
+```
 
