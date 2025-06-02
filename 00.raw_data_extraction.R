@@ -13,6 +13,7 @@ library(haven)
 library(janitor)
 library(data.table)
 library(fastDummies)
+library(factoextra)
 
 source("./_functions/functions.R") # error in consulta_endes function has been fixed
 
@@ -290,13 +291,12 @@ censo_loreto_sinid<-
   censo_final_loreto_2017 %>% 
   select(-ubigeo,-c3_p1_3,-c3_p1_6) # matrix sin id
 
-scaled_censo_loreto_sinid <- scale(censo_loreto_sinid) # escalar valores
+#scaled_censo_loreto_sinid <- scale(censo_loreto_sinid) # escalar valores
 
 pca <- prcomp(scaled_censo_loreto_sinid, center = TRUE, scale. = TRUE) 
 summary(pca) # varianza explicada
 plot(pca, type = "l", main = "Scree Plot")
 #fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
-
 ## devolviendo id y agregando outcome
 
 censo_pca_20<-
