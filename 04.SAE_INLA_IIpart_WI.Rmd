@@ -5,7 +5,7 @@ date: "2025-05-30"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.width = 12, fig.height = 8)
 ```
 
 
@@ -608,5 +608,9 @@ tbl.yrd.dist %>%
   coord_flip() +
   
   facet_wrap(~.metric, scales = "free", ncol = 1)
+```
+
+```{r}
+
 ```
 

@@ -19,21 +19,21 @@ source("./_functions/functions.R") # error in consulta_endes function has been f
 
 wi_edu_2016_2019<-
   map_df(.x = c(2010:2019),
-       .f = ~consulta_endes2(periodo = .x,
-                             codigo_modulo = 64,
-                             base = 'RECH1',
-                             guardar = F) %>% 
-         left_join(consulta_endes2(periodo = .x,
-                                   codigo_modulo = 65,
-                                   base = 'RECH23', guardar = F) %>% 
-                     mutate(
-                       year = .x
-                     ), by = c("HHID")) %>% 
-         
-         left_join(consulta_endes2(periodo = .x, 
-                             codigo_modulo = 64, 
-                             base = 'RECH0', guardar = F ), by = "HHID")%>% 
-         select(year,everything())) %>%
+         .f = ~consulta_endes2(periodo = .x,
+                               codigo_modulo = 64,
+                               base = 'RECH1',
+                               guardar = F) %>% 
+           left_join(consulta_endes2(periodo = .x,
+                                     codigo_modulo = 65,
+                                     base = 'RECH23', guardar = F) %>% 
+                       mutate(
+                         year = .x
+                       ), by = c("HHID")) %>% 
+           
+           left_join(consulta_endes2(periodo = .x, 
+                                     codigo_modulo = 64, 
+                                     base = 'RECH0', guardar = F ), by = "HHID")%>% 
+           select(year,everything())) %>%
   
   
   clean_names() %>% 
@@ -78,7 +78,7 @@ wi_edu_2016_2019<-
                       hv270 == 5 ~ "5th",
                       T ~ NA),
     
-    hv109_recat = ifelse(hv109 != "NE",0,1), # at least primary education
+    hv109_recat = ifelse(hv109 == "NE",0,1), # at least primary education
     
     hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0) # at least 3rd WI
     
@@ -91,9 +91,9 @@ wi_edu_2016_2019<-
 
 wi_edu_2020<-
   consulta_endes2(periodo = 2020,
-                codigo_modulo = 1629,
-                base = 'RECH1',
-                guardar = F) %>% 
+                  codigo_modulo = 1629,
+                  base = 'RECH1',
+                  guardar = F) %>% 
   left_join(consulta_endes2(periodo = 2020,
                             codigo_modulo = 1630,
                             base = 'RECH23', guardar = F) %>% 
@@ -144,13 +144,13 @@ wi_edu_2020<-
                       hv270 == 5 ~ "5th",
                       T ~ NA),
     
-    hv109_recat = ifelse(hv109 != "NE",0,1), # at least primary education
+    hv109_recat = ifelse(hv109 == "NE",0,1), # at least primary education
     
     hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0) # at least 3rd WI
     
   ) %>% 
   zap_labels()
-  
+
 # merge datasets 
 
 wi_edu_2010_2020<-
@@ -293,10 +293,10 @@ censo_loreto_sinid<-
 
 #scaled_censo_loreto_sinid <- scale(censo_loreto_sinid) # escalar valores
 
-pca <- prcomp(scaled_censo_loreto_sinid, center = TRUE, scale. = TRUE) 
+pca <- prcomp(censo_loreto_sinid, center = TRUE, scale. = TRUE) 
 summary(pca) # varianza explicada
 plot(pca, type = "l", main = "Scree Plot")
-#fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
+fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
 ## devolviendo id y agregando outcome
 
 censo_pca_20<-

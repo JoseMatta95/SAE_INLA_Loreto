@@ -331,3 +331,8 @@ write.csv(wi_censo_final_recat, "./data/wi_censo_final_recat.csv", row.names = F
 
 ```
 
+
+```{r}
+
+```
+

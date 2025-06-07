@@ -579,7 +579,7 @@ modelos <- list(
 
 
 ```{r}
-resultados <- imap_dfr(modelos, ~{
+resultados_edu_prop <- imap_dfr(modelos, ~{
   data.frame(
     year = edu_censo_final$year,
     ubigeo = edu_censo_final$ubigeo,

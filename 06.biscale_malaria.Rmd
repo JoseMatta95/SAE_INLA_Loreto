@@ -1,0 +1,148 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-06-06"
+---
+
+```{r}
+library(tidyverse)
+library(sf)
+library(sf)
+library(biscale)
+library(janitor)
+library(innovar)
+library(cowplot)
+```
+
+
+```{r}
+wi_sae <- read.csv("./data/final_data/resultados_SAE_loreto_wi.csv")
+edu_sae <- read.csv("./data/final_data/resultados_SAE_loreto_edu.csv")
+
+data("Peru")
+
+distritos <- Peru %>% filter(dep == "LORETO") %>% mutate(ubigeo = as.integer(ubigeo))
+```
+
+```{r}
+wi_sae_fh2<- wi_sae %>% filter(modelo =="modelo_fh2_spatial")
+
+edu_sae_fh2<- edu_sae %>% filter(modelo =="modelo_fh2_spatial")
+```
+
+
+```{r}
+malaria_dist_total <- read_csv("./data/aux_data/malaria_dist_total.csv") %>% 
+  clean_names() %>% 
+  right_join(distritos) %>% 
+  st_as_sf() %>% 
+  mutate(
+    malaria_incidence = ifelse(is.na(malaria_incidence),0,malaria_incidence)
+  )
+
+malaria_dist_specie <- read_csv("data/aux_data/malaria_dist_species.csv") %>% 
+  clean_names() %>% 
+  right_join(distritos) %>% 
+  st_as_sf() %>% 
+    mutate(
+    malaria_incidence = ifelse(is.na(malaria_incidence),0,malaria_incidence)
+  )
+
+```
+
+
+# INDICE RIQUEZA -----
+```{r}
+data<-
+   malaria_dist_total %>% 
+  full_join(wi_sae_fh2, by = c('year','ubigeo')) %>% 
+  mutate(
+    year = as.character(year)
+  )
+```
+
+
+```{r}
+data_bi <- bi_class(data, y = mean, x = malaria_incidence, dim = 3, style = "quantile")
+```
+
+
+```{r}
+map <- 
+  ggplot() +
+  geom_sf(data = data_bi, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkViolet", dim = 3) +
+  labs(
+    title = "Malaria incidence distribution across WI level"
+  ) +
+ theme_void() +
+  facet_wrap(~year)
+```
+
+
+```{r}
+legend <- bi_legend(pal = "DkViolet",
+                    dim = 3,
+                    xlab = "% poverty",
+                    ylab = "malaria incidence",
+                    size = 8)
+```
+
+
+```{r}
+ ggdraw() +
+  draw_plot(map, 0, 0, 1, 1) +
+  draw_plot(legend, 0.65, .1, 0.2, 0.2)
+```
+
+# EDUCACION -----
+```{r}
+data<-
+   malaria_dist_total %>% 
+  full_join(edu_sae_fh2, by = c('year','ubigeo')) %>% 
+  mutate(
+    year = as.character(year)
+  )
+```
+
+
+```{r}
+data_bi <- bi_class(data, y = mean, x = malaria_incidence, dim = 3, style = "quantile")
+```
+
+
+```{r}
+map <- 
+  ggplot() +
+  geom_sf(data = data_bi, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkViolet", dim = 3) +
+  labs(
+    #title = "Malaria incidence distribution across education level"
+  ) +
+ theme_void() +
+  facet_wrap(~year, ncol = 3)
+```
+
+
+```{r}
+legend <- bi_legend(pal = "DkViolet",
+                    dim = 3,
+                    xlab = "% primary education",
+                    ylab = "malaria incidence",
+                    size = 8)
+```
+
+
+```{r}
+ ggdraw() +
+  draw_plot(map, 0, 0, 1, 1) +
+  draw_plot(legend, 0.65, .1, 0.2, 0.2)
+
+ggsave("./edu_biscale_malaria.png", dpi = 300, bg = "white", width = 8, height = 9)
+```
+
+```{r}
+
+```
+
+
