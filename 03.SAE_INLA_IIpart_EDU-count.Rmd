@@ -62,8 +62,8 @@ edu_censo_final<-
 ## Adding total population to the dataset (using malaria incidence data processed in the main repo)
 
 pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
-  select(year,iddist,pop_landscan) %>% 
-  rename(ubigeo = iddist) %>% 
+  select(year,ubigeo,pop_landscan) %>% 
+  #rename(ubigeo = iddist) %>% 
   mutate(
     ubigeo = as.character(ubigeo)
   )
@@ -599,7 +599,14 @@ resultados_SAE_loreto_edu <-
     upper = .x$summary.fitted.values$`0.975quant`,
     modelo = .y
   )
-}) 
+}) %>% 
+  inner_join(pop_dist) %>% 
+  rename(
+    edu_estimate = mean
+  ) %>% 
+  mutate(
+    across(.cols = edu_estimate:upper, .f=~(.x/pop_landscan), .names = '{.col}_prop')
+  )
 
 write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
 ```
@@ -607,7 +614,7 @@ write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_ed
 
 ```{r}
 resultados_SAE_loreto_edu %>% 
-  ggplot(aes(x = mean, y = ubigeo, col = modelo))+
+  ggplot(aes(x = edu_estimate, y = ubigeo, col = modelo))+
   geom_pointrange(aes(xmin = lower, xmax = upper))+
   facet_grid(modelo~year)
 ```

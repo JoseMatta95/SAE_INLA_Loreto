@@ -47,6 +47,7 @@ wi_edu_2016_2019<-
          ubigeo,
          hv005, # factor de ponderacion hogar
          hv022, #estrato
+         hv025,
          #longitudx,
          #latitudy,
          
@@ -80,7 +81,9 @@ wi_edu_2016_2019<-
     
     hv109_recat = ifelse(hv109 == "NE",0,1), # at least primary education
     
-    hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0) # at least 3rd WI
+    hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0), # at least 3rd WI
+    
+    hv025 = ifelse(hv025 == 1,0,1)
     
   ) %>% 
   zap_labels()
@@ -115,6 +118,7 @@ wi_edu_2020<-
     ubigeo,
     hv005, # factor de ponderacion hogar
     hv022, #estrato
+    hv025,
     #longitudx,
     #latitudy,
     
@@ -146,8 +150,9 @@ wi_edu_2020<-
     
     hv109_recat = ifelse(hv109 == "NE",0,1), # at least primary education
     
-    hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0) # at least 3rd WI
+    hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0), # at least 3rd WI
     
+    hv025 = ifelse(hv025 == 1,0,1)
   ) %>% 
   zap_labels()
 
@@ -172,14 +177,7 @@ wi_edu_2010_2020<-
   filter(
     ubigeo != "160109" #drop ubigeo 160109, becausa it changed to 1608xx in 2016 
   ) %>% 
-  
-  group_by(ubigeo) %>% 
   mutate(
-    n_years = n_distinct(year)
-  ) %>% 
-  ungroup() %>% 
-  mutate(
-    few_years=ifelse(n_years<3,1,0) # variable to identify ubigeo with less than 3 years of sampling
   ) %>% 
   as_tibble()
 

@@ -34,8 +34,7 @@ resultados_SAE_loreto_wi <- read.csv("./data/final_data/resultados_SAE_loreto_wi
 
 
 pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
-  select(year,iddist,pop_landscan) %>% 
-  rename(ubigeo = iddist) %>% 
+  select(year,ubigeo,pop_landscan) %>% 
   mutate(
     ubigeo = as.character(ubigeo)
   )
@@ -89,7 +88,7 @@ predict_sae_loreto<-
   group_by(year,modelo) %>% 
   summarise(
     total_loreto = sum(pop_landscan),
-    mean_loreto = sum(mean),
+    mean_loreto = sum(edu_estimate),
     lower_loreto = sum(lower),
     upper_loreto = sum(upper)
   ) %>% 
@@ -182,7 +181,7 @@ predict_sae_loreto<-
   group_by(year,modelo) %>% 
   summarise(
     total_loreto = round(sum(pop_landscan)),
-    mean_loreto = sum(mean),
+    mean_loreto = sum(wi_estimate),
     lower_loreto = sum(lower),
     upper_loreto = sum(upper)
   ) %>% 
