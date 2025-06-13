@@ -163,3 +163,78 @@ consulta_endes2 <- function(periodo, codigo_modulo, base, guardar = FALSE, ruta 
     endes
   }
 }
+
+# AGGEGATED MEANS PREDICT----
+
+resumen_anual_samples <- function(modelo_inla, data) {
+  # 1. Extraer muestras posteriores del predictor lineal (η)
+  samples <- INLA::inla.posterior.sample(n = 1000, result = modelo_inla)
+  idx_distritos <- which(grepl("^Predictor", rownames(samples[[1]]$latent)))
+  eta_matrix <- sapply(samples, function(x) x$latent[idx_distritos])  # matriz: n_obs x n_draws
+  
+  # 2. Convertir η a μ (escala original)
+  mu_matrix <- exp(eta_matrix)
+  
+  # 3. Crear df auxiliar con año y población
+  df_info <- data.frame(
+    year = data$year,
+    poblacion = data$pop_landscan
+  )
+  
+  # 4. Sumar μ por año
+  proporcion_anual <- function(mu_sample) {
+    df_info$mu <- mu_sample
+    df_info |>
+      dplyr::group_by(year) |>
+      dplyr::summarise(p_agregado = sum(mu), .groups = "drop") |>
+      dplyr::arrange(year) |>
+      dplyr::pull(p_agregado)
+  }
+  
+  # 5. Matriz de μ agregados por año
+  mu_anio_matrix <- apply(mu_matrix, 2, proporcion_anual)
+  
+  # 6. Población total por año
+  pob_total_anio <- df_info |>
+    dplyr::group_by(year) |>
+    dplyr::summarise(pob = sum(poblacion), .groups = "drop") |>
+    dplyr::arrange(year) |>
+    dplyr::pull(pob)
+  
+  # 7. Calcular proporciones (μ / población)
+  prop_anio_matrix <- sweep(mu_anio_matrix, 1, pob_total_anio, FUN = "/")
+  
+  # 8. Estadísticos resumen (media e IC 95%)
+  p_anio_mean <- rowMeans(prop_anio_matrix)
+  p_anio_li <- apply(prop_anio_matrix, 1, quantile, probs = 0.025)
+  p_anio_ls <- apply(prop_anio_matrix, 1, quantile, probs = 0.975)
+  
+  # 9. Consolidar en un data frame
+  df_anual <- data.frame(
+    year = sort(unique(df_info$year)),
+    media = p_anio_mean,
+    li_95 = p_anio_li,
+    ls_95 = p_anio_ls
+  ) %>% 
+    as_tibble()
+  
+  return(df_anual)
+}
+
+
+
+# get_legend2 FUNCTION ----
+
+
+get_legend2 <- function(plot, legend = NULL) {
+  gt <- if (inherits(plot, "ggplot")) ggplotGrob(plot)
+  else if (inherits(plot, "grob")) plot
+  else stop("No es ggplot ni grob")
+  pattern <- "guide-box"
+  if (!is.null(legend)) pattern <- paste0(pattern, "-", legend)
+  idx <- grep(pattern, gt$layout$name)
+  nonz <- which(!vapply(gt$grobs[idx], inherits, logical(1), "zeroGrob"))
+  if (length(nonz)) return(gt$grobs[[idx[nonz[1]]]])
+  return(NULL)
+}
+

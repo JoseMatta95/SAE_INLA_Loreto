@@ -92,7 +92,8 @@ wi_censo_final2<-
   inner_join(pop_dist) %>% 
   mutate(
     pop_landscan = round(pop_landscan),
-    cases_number = round(hv270_recat*pop_landscan)
+    cases_number = round(hv270_recat*pop_landscan),
+    year_re = as.integer(factor(year)) # for interaction spatial - time
   )
 ```
 
@@ -151,15 +152,15 @@ summary(model_nb) # The negative binomial family was chosen.
 model_fit10spat <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     pc6 + pc7 + pc8 + pc9 + pc10 +
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
+    f(id.sp, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),
   
   data = wi_censo_final2,
   family = "nbinomial",
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,config = TRUE)
 )
 
 ```
@@ -169,15 +170,15 @@ model_fit10spat <- inla(
 model_fit8spat <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     pc6 + pc7 + pc8 + total_millones + 
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
+    f(id.sp, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),
   
   data = wi_censo_final2,
   family = "nbinomial",
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,config = TRUE)
 )
 
 ```
@@ -186,15 +187,15 @@ model_fit8spat <- inla(
 ```{r}
 model_fit5spat <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
+    f(id.sp, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),
   
   data = wi_censo_final2,
   family = "nbinomial",
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,config = TRUE)
 )
 
 ```
@@ -203,16 +204,16 @@ model_fit5spat <- inla(
 ```{r}
 model_fit2spat <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 +
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
-  
+    f(id.sp, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),
   data = wi_censo_final2,
   family = "nbinomial",
-  offset = log(pop_landscan),  
-  
+  offset = log(pop_landscan),
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
 )
+
+summary(model_fit2spat)
 
 ```
 
@@ -220,15 +221,15 @@ model_fit2spat <- inla(
 ```{r}
 model_fit2spat_new <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + total_millones + total_dist_mat +
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
+    f(id.sp, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),
   
   data = wi_censo_final2,
   family = "nbinomial",
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,config = TRUE)
 )
 ```
 
@@ -445,7 +446,7 @@ distritos %>%
                                           "pc2","pc2sp","pc2new")) %>% 
   ggplot() +
   geom_sf(aes(fill=.estimate),lwd=0.1) +
-  scale_fill_distiller(palette="Reds",direction=1,name="smape") +
+  scale_fill_distiller(palette="Reds",direction=1,name="smape", limits = c(0,30)) +
   facet_wrap(vars(modelo), nrow = 2) +
   theme_linedraw(base_size = 10) +
   theme(
@@ -487,7 +488,6 @@ data.cpo %>%
       rows = model %in% c("modelo5","modelo10")
     )
   )
-
 
 ```
 

@@ -144,7 +144,7 @@ summary(model_nb) # The negative binomial family was chosen.
 # fit models (2) ----
 
 ```{r}
-modelo_fh8_spatial <- inla(
+modelo_fh8_spatial_edu <- inla(
   
   formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+ 
     pc6 + pc7 + pc8  +
@@ -156,13 +156,13 @@ modelo_fh8_spatial <- inla(
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE)
+  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE)
 )
 ```
 
 
 ```{r}
-modelo_fh10_spatial <- inla(
+modelo_fh10_spatial_edu <- inla(
   
   formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+ 
     pc6 + pc7 + pc8 + pc9 + pc10  +
@@ -174,13 +174,13 @@ modelo_fh10_spatial <- inla(
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE)
+  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE)
 )
 ```
 
 
 ```{r}
-modelo_fh5_spatial <- inla(
+modelo_fh5_spatial_edu <- inla(
   
   formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     f(id.sp, model = "bym2", graph = w.loreto)+ 
@@ -191,14 +191,14 @@ modelo_fh5_spatial <- inla(
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE)
+  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE)
 )
 ```
 
 
 ```{r}
 
-modelo_fh2_spatial <- inla(
+modelo_fh2_spatial_edu <- inla(
   
   formula =  cases_number ~ 1 + pc1 + pc2 +
     f(year, model = "ar1") +
@@ -209,13 +209,13 @@ modelo_fh2_spatial <- inla(
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE)
+  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE)
 )
 ```
 
 
 ```{r}
-modelo_fh2_spatial_new <- inla(
+modelo_fh2_spatial_new_edu <- inla(
   
   formula =  cases_number ~ 1 + pc1 + pc2 + total_millones +
     f(year, model = "ar1") +
@@ -226,7 +226,7 @@ modelo_fh2_spatial_new <- inla(
   offset = log(pop_landscan),  
   
   control.predictor = list(compute = TRUE, link = 1),
-  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE)
+  control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE)
 )
 ```
 
@@ -235,16 +235,16 @@ modelo_fh2_spatial_new <- inla(
 ```{r}
 model_metrics <- tibble(
   Modelo = c("Modelo 10", "Modelo 8", "Modelo 5", "Modelo 2","modelo 2 new"),
-  DIC     = c(modelo_fh10_spatial$dic$dic, modelo_fh8_spatial$dic$dic, 
-              modelo_fh5_spatial$dic$dic, modelo_fh2_spatial$dic$dic,modelo_fh2_spatial_new$dic$dic),
-  pD      = c(modelo_fh10_spatial$dic$p.eff, modelo_fh8_spatial$dic$p.eff, 
-              modelo_fh5_spatial$dic$p.eff, modelo_fh2_spatial$dic$p.eff,modelo_fh2_spatial_new$dic$p.eff),
-  WAIC    = c(modelo_fh10_spatial$waic$waic, modelo_fh8_spatial$waic$waic, 
-              modelo_fh5_spatial$waic$waic, modelo_fh2_spatial$waic$waic,modelo_fh2_spatial_new$waic$waic),
-  pWAIC   = c(modelo_fh10_spatial$waic$p.eff, modelo_fh8_spatial$waic$p.eff, 
-              modelo_fh5_spatial$waic$p.eff, modelo_fh2_spatial$waic$p.eff,modelo_fh2_spatial_new$waic$p.eff),
-  logML   = c(modelo_fh10_spatial$mlik[1,1], modelo_fh8_spatial$mlik[1,1], 
-              modelo_fh5_spatial$mlik[1,1], modelo_fh2_spatial$mlik[1,1],modelo_fh2_spatial_new$mlik[1,1])
+  DIC     = c(modelo_fh10_spatial_edu$dic$dic, modelo_fh8_spatial_edu$dic$dic, 
+              modelo_fh5_spatial_edu$dic$dic, modelo_fh2_spatial_edu$dic$dic,modelo_fh2_spatial_new_edu$dic$dic),
+  pD      = c(modelo_fh10_spatial_edu$dic$p.eff, modelo_fh8_spatial_edu$dic$p.eff, 
+              modelo_fh5_spatial_edu$dic$p.eff, modelo_fh2_spatial_edu$dic$p.eff,modelo_fh2_spatial_new_edu$dic$p.eff),
+  WAIC    = c(modelo_fh10_spatial_edu$waic$waic, modelo_fh8_spatial_edu$waic$waic, 
+              modelo_fh5_spatial_edu$waic$waic, modelo_fh2_spatial_edu$waic$waic,modelo_fh2_spatial_new_edu$waic$waic),
+  pWAIC   = c(modelo_fh10_spatial_edu$waic$p.eff, modelo_fh8_spatial_edu$waic$p.eff, 
+              modelo_fh5_spatial_edu$waic$p.eff, modelo_fh2_spatial_edu$waic$p.eff,modelo_fh2_spatial_new_edu$waic$p.eff),
+  logML   = c(modelo_fh10_spatial_edu$mlik[1,1], modelo_fh8_spatial_edu$mlik[1,1], 
+              modelo_fh5_spatial_edu$mlik[1,1], modelo_fh2_spatial_edu$mlik[1,1],modelo_fh2_spatial_new_edu$mlik[1,1])
 )
 ```
 
@@ -272,11 +272,11 @@ model_metrics %>%
 distritos_sf_predict<-
   edu_censo_final2 %>% 
   mutate(
-    fit8_spat = (modelo_fh8_spatial$summary.fitted.values$mean),
-    fit10_spat = (modelo_fh10_spatial$summary.fitted.values$mean),
-    fit5_spat = (modelo_fh5_spatial$summary.fitted.values$mean),
-    fit2_spat = (modelo_fh2_spatial$summary.fitted.values$mean),
-    fit2_new = (modelo_fh2_spatial_new$summary.fitted.values$mean),
+    fit8_spat = (modelo_fh8_spatial_edu$summary.fitted.values$mean),
+    fit10_spat = (modelo_fh10_spatial_edu$summary.fitted.values$mean),
+    fit5_spat = (modelo_fh5_spatial_edu$summary.fitted.values$mean),
+    fit2_spat = (modelo_fh2_spatial_edu$summary.fitted.values$mean),
+    fit2_new = (modelo_fh2_spatial_new_edu$summary.fitted.values$mean),
     real_cases = (edu_censo_final2$cases_number)
   ) %>% 
   left_join(distritos) %>% 
@@ -392,11 +392,11 @@ distritos_sf_predict %>%
 ## Performance metrics ----
 
 ```{r}
-fit8_spat <- (modelo_fh8_spatial$summary.fitted.values$mean)
-fit10_spat <- (modelo_fh10_spatial$summary.fitted.values$mean)
-fit5_spat <- (modelo_fh5_spatial$summary.fitted.values$mean)
-fit2_spat <- (modelo_fh2_spatial$summary.fitted.values$mean)
-fit2_new <- (modelo_fh2_spatial_new$summary.fitted.values$mean)
+fit8_spat <- (modelo_fh8_spatial_edu$summary.fitted.values$mean)
+fit10_spat <- (modelo_fh10_spatial_edu$summary.fitted.values$mean)
+fit5_spat <- (modelo_fh5_spatial_edu$summary.fitted.values$mean)
+fit2_spat <- (modelo_fh2_spatial_edu$summary.fitted.values$mean)
+fit2_new <- (modelo_fh2_spatial_new_edu$summary.fitted.values$mean)
 estimacion_real <- (edu_censo_final2$cases_number)
 ```
 
@@ -468,7 +468,7 @@ distritos %>%
                                           "pc2sp","pc2new")) %>% 
   ggplot() +
   geom_sf(aes(fill=.estimate),lwd=0.1) +
-  scale_fill_distiller(palette="Reds",direction=1,name="smape") +
+  scale_fill_distiller(palette="Reds",direction=1,name="smape", limits = c(0,30)) +
   facet_wrap(vars(modelo), nrow = 1) +
   theme_linedraw(base_size = 10) +
   theme(strip.text = element_text(face = "bold",size = 20),
@@ -479,11 +479,11 @@ distritos %>%
 
 # cross validation ----
 ```{r}
-cpo.10cp.sp <--2*sum(log(modelo_fh10_spatial$cpo$cpo),na.rm = T)
-cpo.5cp.sp <--2*sum(log(modelo_fh5_spatial$cpo$cpo),na.rm = T)
-cpo.8cp.sp <--2*sum(log(modelo_fh8_spatial$cpo$cpo),na.rm = T)
-cpo.2cp.sp <--2*sum(log(modelo_fh2_spatial$cpo$cpo),na.rm = T)
-cpo.2cp.sp.new <- -2*sum(log(modelo_fh2_spatial_new$cpo$cpo),na.rm = T)
+cpo.10cp.sp <--2*sum(log(modelo_fh10_spatial_edu$cpo$cpo),na.rm = T)
+cpo.5cp.sp <--2*sum(log(modelo_fh5_spatial_edu$cpo$cpo),na.rm = T)
+cpo.8cp.sp <--2*sum(log(modelo_fh8_spatial_edu$cpo$cpo),na.rm = T)
+cpo.2cp.sp <--2*sum(log(modelo_fh2_spatial_edu$cpo$cpo),na.rm = T)
+cpo.2cp.sp.new <- -2*sum(log(modelo_fh2_spatial_new_edu$cpo$cpo),na.rm = T)
 
 data.cpo  <-  list(
                    "modelo5spat" = cpo.5cp.sp,
@@ -542,7 +542,7 @@ graficos<-
 ```
 
 
-```{r}
+```{r, warning=F}
 graficos$graph[[4]]
 ```
 
@@ -563,8 +563,8 @@ prop_sae_predict_edu<-
 prop_sae_predict_edu %>% 
   pivot_longer(cols = real_cases:fit2_new) %>% 
   mutate(
-    name = factor(name, levels = c("real_cases", "fit2_new", "fit2_spatial", "fit5_spat", 
-                                   "fit8_spat", "fit10_spat"))
+    name = factor(name, levels = c("real_cases", "fit10_spat", "fit8_spat", "fit5_spat", 
+                                   "fit2_spat", "fit2_new"))
   ) %>% 
   
   ggplot()+
@@ -579,11 +579,11 @@ prop_sae_predict_edu %>%
 
 ```{r}
 modelos <- list( # lista para trabajar en bloque
-  modelo_fh8_spatial = modelo_fh8_spatial,
-  modelo_fh10_spatial = modelo_fh10_spatial,
-  modelo_fh5_spatial = modelo_fh5_spatial,
-  modelo_fh2_spatial = modelo_fh2_spatial,
-  modelo_fh2_new = modelo_fh2_spatial_new
+  modelo_fh8_spatial = modelo_fh8_spatial_edu,
+  modelo_fh10_spatial = modelo_fh10_spatial_edu,
+  modelo_fh5_spatial = modelo_fh5_spatial_edu,
+  modelo_fh2_spatial = modelo_fh2_spatial_edu,
+  modelo_fh2_new = modelo_fh2_spatial_new_edu
 )
 ```
 
@@ -618,7 +618,6 @@ resultados_SAE_loreto_edu %>%
   geom_pointrange(aes(xmin = lower, xmax = upper))+
   facet_grid(modelo~year)
 ```
-
 
 
 # accuracy metris vs population
