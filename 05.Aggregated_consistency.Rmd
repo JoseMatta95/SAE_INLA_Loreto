@@ -72,11 +72,11 @@ data_final_nest<-
 ```{r}
 # 2. The district-level estimates by year will be aggregated to the department-year level
 
-modelos<- list(model_pc2=modelo_fh2_spatial_edu,
-               model_pc2_new=modelo_fh2_spatial_new_edu,
-               model_pc5=modelo_fh5_spatial_edu,
-               model_pc8=modelo_fh8_spatial_edu,
-               model_pc10=modelo_fh10_spatial_edu)
+modelos<- list(model_pc2=modelo_fh2_spatial_edu_2,
+               model_pc2_2=modelo_fh2_spatial_edu_4,
+               model_pc5=modelo_fh5_spatial_edu_2,
+               model_pc8=modelo_fh8_spatial_edu_2,
+               model_pc10=modelo_fh10_spatial_edu_2)
 
 predict_sae_loreto <- imap_dfr(
   .x = modelos,
@@ -132,7 +132,7 @@ validation_edu_depart_graph<-
   
   scale_color_manual(name = "model values",
                      values = c("model_pc2" = "gray",
-                                "model_pc2_new" = "purple",
+                                "model_pc2_2" = "purple",
                                 "model_pc5" = "red",
                                 "model_pc8"="blue",
                                 "model_pc10" = "green",
@@ -192,7 +192,7 @@ validation_edu_depart_graph2<-
   
   scale_color_manual(name = "model values",
                      values = c("model_pc2" = "gray",
-                                "model_pc2_new" = "purple",
+                                "model_pc2_2" = "purple",
                                 "model_pc5" = "red",
                                 "model_pc8"="blue",
                                 "model_pc10" = "green",
@@ -223,11 +223,15 @@ validation_edu_depart_graph2<-
 
 ## Departament: Loreto
 ```{r}
-modelos<- list(model_pc2=model_fit2spat,
-               model_pc2_new=model_fit2spat_new,
-               model_pc5=model_fit5spat,
-               model_pc8=model_fit8spat,
-               model_pc10=model_fit10spat)
+modelos<- list(model_pc2=model_fit2spat_1,
+               model_pc2_2=model_fit2spat_2,
+               model_pc5=model_fit5spat_1,
+               model_pc8=model_fit8spat_1,
+               model_pc10=model_fit10spat_1,
+               
+               model_pc5_2=model_fit5spat_2,
+               model_pc8_2=model_fit8spat_2,
+               model_pc10_2=model_fit10spat_2)
 
 predict_sae_loreto <- imap_dfr(
   .x = modelos,
@@ -270,6 +274,11 @@ validation_wi_dep_graph<- # graph ----
     dif = hv270_recat - media
   ) %>% 
   
+  filter(
+    modelo %in% c("model_pc10","model_pc8","model_pc5",
+                  "model_pc2","model_pc2_2")
+  ) %>% 
+  
   ggplot()+
   geom_pointrange(alpha = 0.5, aes(x = modelo, y =media,
                       col = modelo, ymin = li_95, ymax = ls_95))+
@@ -279,7 +288,7 @@ validation_wi_dep_graph<- # graph ----
   
   scale_color_manual(name = "model values",
                      values = c("model_pc2" = "gray",
-                                "model_pc2_new" = "purple",
+                                "model_pc2_2" = "purple",
                                 "model_pc5" = "red",
                                 "model_pc8"="blue",
                                 "model_pc10" = "green",
@@ -307,6 +316,11 @@ validation_wi_dep_graph<- # graph ----
 ```{r, warning=F}
 validation_wi_dep_graph2<-
   validation_wi_dep %>% 
+  
+  filter(
+    modelo %in% c("model_pc10","model_pc8","model_pc5",
+                  "model_pc2","model_pc2_2")) %>% 
+      
   mutate(
     difference = as.factor(ifelse(hv270_recat - media <=0.03,"< 3%",
                                   ifelse(hv270_recat - media >0.03 & 
@@ -340,7 +354,7 @@ validation_wi_dep_graph2<-
   
   scale_color_manual(name = "model values",
                      values = c("model_pc2" = "gray",
-                                "model_pc2_new" = "purple",
+                                "model_pc2_2" = "purple",
                                 "model_pc5" = "red",
                                 "model_pc8"="blue",
                                 "model_pc10" = "green",
