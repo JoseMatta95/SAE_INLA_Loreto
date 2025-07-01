@@ -1,7 +1,12 @@
 ---
-title: "Untitled"
-output: html_document
-date: "2025-05-30"
+title: "SAE: Education level"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: cosmo
+date: "2025-05-28"
 ---
 
 ```{r setup, include=FALSE}
@@ -23,21 +28,22 @@ library(gt)
 library(viridis)
 ```
 
+# Data
 ```{r}
 data("Peru")
 distritos<- Peru %>% filter(dep=="LORETO") %>% select(ubigeo,geometry)
+
 aux_data<- read.csv("./data/aux_data/aux_data.csv") %>% mutate(ubigeo = as.character(ubigeo))
 
 wi_edu_2010_2020<- read.csv("./data/wi_edu_2010_2020.csv")
-```
 
+wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% mutate(ubigeo = as.character(ubigeo))
 
-# working data
-```{r}
-wi_censo_final<- read.csv("./data/wi_censo_final_recat.csv") %>% 
-  as_tibble() %>% 
-  mutate(ubigeo = as.character(ubigeo)) %>% 
-  left_join(aux_data)
+pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
+  select(year,ubigeo,pop_landscan) %>% 
+  mutate(
+    ubigeo = as.character(ubigeo)
+  )
 ```
 
 # Work begins on the variable wealth index (hv270), recategorized as:belongs to 
@@ -65,38 +71,30 @@ To obtain the numerator:
 offset: log(total population)
 
 
-# Fit INLA 
-## INLA - wealth index (hv207_recat
-```{r}
-# Spatial component
-loreto.dist <- poly2nb(distritos)
-w.loreto <- nb2mat(loreto.dist, style = "W")
-```
+# Fit INLA
 
-# fit models
-Adding total population to the dataset (using malaria incidence data processed in the main repo)
-```{r}
-pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
-  select(year,ubigeo,pop_landscan) %>% 
-  #rename(ubigeo = iddist) %>% 
-  mutate(
-    ubigeo = as.character(ubigeo)
-  )
-```
-
+## INLA - Education (working data)
 
 ```{r}
 wi_censo_final2<-
   wi_censo_final %>% 
-  #select(year,ubigeo,hv270_recat,hv270_recat_cor) %>% 
-  inner_join(pop_dist) %>% 
+  left_join(aux_data) %>% ## adding auxiliary data
+   inner_join(pop_dist) %>% ## Adding total population to the dataset (using malaria incidence data processed in the main repo)
   mutate(
     pop_landscan = round(pop_landscan),
     cases_number = round(hv270_recat*pop_landscan),
     year_re = as.integer(factor(year)), # for interaction spatial - time
-    id.sp2 = id.sp
+    id.sp2 = id.sp # for interaction spatial - time
   )
 ```
+
+## Spatial component
+
+```{r}
+loreto.dist <- poly2nb(distritos)
+w.loreto <- nb2mat(loreto.dist, style = "W")
+```
+
 
 ## Comparing family: binomial vs poisson vs negative binomial
 ```{r}
@@ -164,12 +162,13 @@ model_fit10spat_1 <- inla(
   control.compute = list(dic = TRUE, cpo = TRUE, waic = TRUE, config = TRUE))
 ```
 
+
 ```{r}
 model_fit10spat_2 <- inla(
   formula =  cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5+ 
     pc6 + pc7 + pc8 + pc9 + pc10  +
     f(id.sp, model = "bym2", graph = w.loreto) +
-    f(year, model = "ar1") +
+    f(year_re, model = "ar1") +
     f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
       control.group = list(model = "ar1")),
   
@@ -207,7 +206,7 @@ model_fit8spat_2 <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     pc6 + pc7 + pc8 + total_millones + 
     f(id.sp, model = "bym2", graph = w.loreto) +
-    f(year, model = "ar1") +
+    f(year_re, model = "ar1") +
     f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
       control.group = list(model = "ar1")),
   
@@ -242,7 +241,7 @@ model_fit5spat_1 <- inla(
 model_fit5spat_2 <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + pc3 + pc4 + pc5 + 
     f(id.sp, model = "bym2", graph = w.loreto) +
-    f(year, model = "ar1") +
+    f(year_re, model = "ar1") +
     f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
       control.group = list(model = "ar1")),
   
@@ -270,8 +269,6 @@ model_fit2spat_1 <- inla(
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
 )
 
-summary(model_fit2spat)
-
 ```
 
 
@@ -279,7 +276,7 @@ summary(model_fit2spat)
 model_fit2spat_2 <- inla(
   formula = cases_number ~ 1 + pc1 + pc2 + 
     f(id.sp, model = "bym2", graph = w.loreto) +
-    f(year, model = "ar1") +
+    f(year_re, model = "ar1") +
     f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
       control.group = list(model = "ar1")),
   
@@ -313,7 +310,7 @@ model_fit2spat_3 <- inla(
 model_fit2spat_4<- inla(
   formula =  cases_number ~ 1 + pc1 + pc2 + total_millones + edu_dist_mat +
     f(id.sp, model = "bym2", graph = w.loreto) +
-    f(year, model = "ar1") +
+    f(year_re, model = "ar1") +
     f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
       control.group = list(model = "ar1")),
   
@@ -368,7 +365,7 @@ model_metrics <- tibble(
 )
 ```
 
-
+## Summary table
 ```{r}
 model_metrics %>%
   arrange(WAIC) %>%
@@ -378,25 +375,27 @@ model_metrics %>%
   
   tab_style(
     style = list(
-      cell_fill(color = "#D5F5E3"),
-      cell_text(weight = "bold")
+      # cell_fill(color = "#D5F5E3"),
+      # cell_text(weight = "bold")
     ),
-    locations = cells_body(rows = Modelo %in% c("Modelo 8-2", "Modelo 10-2"))
+    locations = cells_body(
+      #rows = Modelo %in% c("Modelo 8-2", "Modelo 10-2")
+      )
   ) %>%
   
   tab_style(
     style = list(
-      cell_fill(color = "#FFF3B0"),
-      cell_text(weight = "bold")
+      # cell_fill(color = "#FFF3B0"),
+      # cell_text(weight = "bold")
     ),
     locations = cells_body(
-      rows = Modelo %in% c("Modelo 2-2", "Modelo 5-2","Modelo 10-1")
+      #rows = Modelo %in% c("Modelo 2-2", "Modelo 5-2","Modelo 10-1")
     )
   )
 ```
 
 
-# Model accuracy 
+# Model accuracy (1: total values)
 ```{r}
 distritos_sf_predict<-
   wi_censo_final2 %>% 
@@ -409,6 +408,7 @@ distritos_sf_predict<-
     fit5_spat_2 = (model_fit5spat_2$summary.fitted.values$mean),
     fit2_spat = (model_fit2spat_1$summary.fitted.values$mean),
     fit2_spat_2 = (model_fit2spat_2$summary.fitted.values$mean),
+    fit2_spat_3 = (model_fit2spat_3$summary.fitted.values$mean),
     fit2_spat_4 = (model_fit2spat_4$summary.fitted.values$mean),
     real_cases = (wi_censo_final2$cases_number)
   ) %>% 
@@ -426,9 +426,12 @@ map.direct_est <-
   geom_sf(aes(fill=cases_number))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
+```
 
+
+```{r}
 map2sp <-
   distritos_sf_predict %>% 
   filter(year == 2010) %>% 
@@ -437,7 +440,7 @@ map2sp <-
   geom_sf(aes(fill=fit2_spat))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
 
 map5sp <-
@@ -448,7 +451,7 @@ map5sp <-
   geom_sf(aes(fill=fit5_spat))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
 
 map8sp <-
@@ -459,7 +462,7 @@ map8sp <-
   geom_sf(aes(fill=fit8_spat))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
 
 map10sp <-
@@ -470,7 +473,7 @@ map10sp <-
   geom_sf(aes(fill=fit10_spat))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
 
 map10sp_2 <-
@@ -481,7 +484,7 @@ map10sp_2 <-
   geom_sf(aes(fill=fit10_spat_2))+
   scale_fill_viridis(direction = -1,option = "rocket") +
   theme(
-    #legend.position = "bottom"
+    legend.position = "bottom"
   )
 ```
 
@@ -537,36 +540,15 @@ distritos_sf_predict %>%
 ```
 
 
-## Performance metrics 
+## Performance metrics ----
 ```{r}
-fit10_spat = model_fit10spat_1$summary.fitted.values$mean
-fit10_spat_2 = model_fit10spat_2$summary.fitted.values$mean
-fit8_spat = (model_fit8spat_1$summary.fitted.values$mean)
-fit8_spat_2 = (model_fit8spat_2$summary.fitted.values$mean)
-fit5_spat = (model_fit5spat_1$summary.fitted.values$mean)
-fit5_spat_2 = (model_fit5spat_2$summary.fitted.values$mean)
-fit2_spat = (model_fit2spat_1$summary.fitted.values$mean)
-fit2_spat_2 = (model_fit2spat_2$summary.fitted.values$mean)
-fit2_spat_4 = (model_fit2spat_4$summary.fitted.values$mean)
-real_cases = (wi_censo_final2$cases_number)
 
-
-fitted_vals  <-  list("pc10sp" = fit10_spat,
-                      "pc10sp_2" = fit10_spat_2,
-                      "pc8sp" = fit8_spat,
-                      "pc8sp_2" = fit8_spat_2,
-                      "pc5sp" = fit5_spat,
-                      "pc5sp_2" = fit5_spat_2,
-                      "pc2sp" = fit2_spat,
-                      "pc2sp_2" = fit2_spat_2,
-                      "pc2sp_4" = fit2_spat_4
-                      ) %>% 
-  as.data.frame() %>% 
-  gather(key = "modelo", value = "fit") %>% 
-  group_by(modelo) %>% 
+fitted_vals  <-  
+distritos_sf_predict %>% 
+  select(year,ubigeo,fit10_spat:real_cases) %>% 
+  pivot_longer(cols = c(fit10_spat:fit2_spat_4), values_to = "fit", names_to = "modelo") %>% 
   mutate(
-    actual = real,
-    ubigeo = as.character(wi_censo_final$ubigeo)
+    actual = real_cases
   )
 ```
 
@@ -589,7 +571,7 @@ tbl.yrd.dist <-  fitted_vals %>%
 
 
 
-## Table in-sample accuracy metrics
+## Table in-sample accuracy metrics ----
 ```{r}
 tbl.yrd.full %>% 
   pivot_wider(id_cols = modelo,
@@ -634,6 +616,7 @@ cpo.5cp.sp <- -2*sum(log(model_fit5spat_1$cpo$cpo),na.rm = T)
 cpo.5cp.sp2 <- -2*sum(log(model_fit5spat_2$cpo$cpo),na.rm = T)
 cpo.2cp.sp <- -2*sum(log(model_fit2spat_1$cpo$cpo),na.rm = T)
 cpo.2cp.sp2 <- -2*sum(log(model_fit2spat_2$cpo$cpo),na.rm = T)
+cpo.2cp.sp3 <- -2*sum(log(model_fit2spat_3$cpo$cpo),na.rm = T)
 cpo.2cp.sp4 <- -2*sum(log(model_fit2spat_4$cpo$cpo),na.rm = T)
 
 data.cpo  <-  list("modelo10" = cpo.10cp.sp,
@@ -644,6 +627,7 @@ data.cpo  <-  list("modelo10" = cpo.10cp.sp,
                    "modelo5_2" = cpo.5cp.sp2,
                    "modelo2" = cpo.2cp.sp,
                    "modelo2_2" = cpo.2cp.sp2,
+                   "modelo2_3" = cpo.2cp.sp3,
                    "modelo2_4" = cpo.2cp.sp4) %>% 
   as.data.frame()
 ```
@@ -670,7 +654,307 @@ data.cpo %>%
 
 ```
 
-## Visualization
+## Table of general metrics (1)
+```{r}
+bind_cols(
+model_metrics %>% 
+  arrange(Modelo),
+
+tbl.yrd.full %>% 
+  pivot_wider(id_cols = modelo,
+              names_from = .metric,
+              values_from = .estimate) %>% 
+  arrange(modelo),
+
+data.cpo %>% 
+  pivot_longer(cols=colnames(data.cpo),
+               names_to = "model",
+               values_to = "CPO") %>% 
+  arrange(model)
+) %>% 
+  select(Modelo,DIC,pD,WAIC,pWAIC,logML,mae,mase,smape,rmse,CPO) %>% 
+  
+  arrange(smape) %>% 
+  gt() %>% 
+  tab_header(title = md("**General metrics: model diagnosis, errors, LOO-CV**"),
+             subtitle = md("**Count values**" )) %>% 
+  tab_style(
+    style = list(
+       #cell_fill(color = "#FFF3B0"),  # amarillo claro
+      # cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = Modelo %in% c("Modelo 10-2","Modelo 5-2","Modelo 2-2")
+    )
+  )
+```
+
+# Model accuracy (2: proportions values)
+
+```{r}
+distritos_sf_predict_prop<-
+  wi_censo_final2 %>% 
+  mutate(
+    fit10_spat = model_fit10spat_1$summary.fitted.values$mean,
+    fit10_spat_2 = model_fit10spat_2$summary.fitted.values$mean,
+    fit8_spat = (model_fit8spat_1$summary.fitted.values$mean),
+    fit8_spat_2 = (model_fit8spat_2$summary.fitted.values$mean),
+    fit5_spat = (model_fit5spat_1$summary.fitted.values$mean),
+    fit5_spat_2 = (model_fit5spat_2$summary.fitted.values$mean),
+    fit2_spat = (model_fit2spat_1$summary.fitted.values$mean),
+    fit2_spat_2 = (model_fit2spat_2$summary.fitted.values$mean),
+    fit2_spat_3 = (model_fit2spat_3$summary.fitted.values$mean),
+    fit2_spat_4 = (model_fit2spat_4$summary.fitted.values$mean),
+    real_cases = (wi_censo_final2$cases_number),
+    
+    fit10_spatvar = model_fit10spat_1$summary.fitted.values$sd,
+    fit10_spat_2var = model_fit10spat_2$summary.fitted.values$sd,
+    fit8_spatvar = (model_fit8spat_1$summary.fitted.values$sd),
+    fit8_spat_2var = (model_fit8spat_2$summary.fitted.values$sd),
+    fit5_spatvar = (model_fit5spat_1$summary.fitted.values$sd),
+    fit5_spat_2var = (model_fit5spat_2$summary.fitted.values$sd),
+    fit2_spatvar = (model_fit2spat_1$summary.fitted.values$sd),
+    fit2_spat_2var = (model_fit2spat_2$summary.fitted.values$sd),
+    fit2_spat_3var = (model_fit2spat_3$summary.fitted.values$sd),
+    fit2_spat_4var = (model_fit2spat_4$summary.fitted.values$sd),
+    
+  ) %>% 
+  left_join(distritos) %>% 
+  
+  mutate(
+    across(.cols = c(fit10_spat:real_cases), .f=~round(.x/pop_landscan,2)),
+    across(.cols = c(fit10_spatvar:fit2_spat_4var), .f=~round((.x/pop_landscan)^2,6))
+  ) %>% 
+  st_as_sf()
+```
+
+## Comparison DE vs Pred. SAE ----
+
+```{r}
+distritos_sf_predict_prop %>% 
+  select(year,real_cases,fit2_spat_2,fit2_spat_3,fit2_spat_4,fit5_spat,fit10_spat) %>% 
+  st_drop_geometry() %>%
+  filter(!is.na(real_cases)) %>%
+  rename(directo = real_cases) %>%
+  pivot_longer(cols = starts_with("fit"),
+               names_to = "modelo",
+               values_to = "predicho") %>%
+  ggplot(aes(x = directo, y = predicho, color = modelo)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray40") +
+  facet_grid(year~modelo) +
+  labs(
+    x = "Estimación directa",
+    y = "Predicción del modelo",
+    title = "Comparación de estimaciones directas vs modelos SAE",
+    subtitle = "Línea diagonal = ajuste perfecto"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+## Performance metrics ----
+
+```{r}
+fitted_vals  <-  
+distritos_sf_predict_prop %>% 
+  select(year,ubigeo,fit10_spat:real_cases) %>% 
+  pivot_longer(cols = c(fit10_spat:fit2_spat_4), values_to = "fit", names_to = "modelo") %>% 
+  mutate(
+    actual = real_cases
+  )
+```
+
+
+```{r}
+#### Metrics ----
+perform.metrics <- yardstick::metric_set(mae,mase,smape,rmse)
+perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
+```
+
+
+```{r}
+##### total metrics----
+tbl.yrd.full <-  fitted_vals %>% 
+  group_by(modelo) %>%
+  perform.metrics(truth = real_cases, estimate = fit)
+
+##### metrics by districts----
+tbl.yrd.dist_prop <-  fitted_vals %>% 
+  group_by(modelo,ubigeo) %>%
+  perform.metrics.dist(truth = real_cases, estimate = fit)
+```
+
+## Table in-sample accuracy metrics ----
+
+```{r}
+tbl.yrd.full %>% 
+  pivot_wider(id_cols = modelo,
+              names_from = .metric,
+              values_from = .estimate) %>%
+  arrange(smape) %>% 
+  gt() %>%
+  tab_header(title = md("in-sample accuracy metrics")) %>% 
+  tab_style(
+    style = list(
+      # cell_fill(color = "#FFF3B0"),  # amarillo claro
+      # cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = modelo %in% c("fit8_spat_2","fit2_spat_2")
+    )
+  )
+```
+
+### mapping the performance metrics
+```{r}
+distritos %>% 
+  inner_join(tbl.yrd.dist_prop) %>% 
+  filter(.metric=="smape" & modelo %in% c("fit8_spat_2","fit2_spat_2","fit10_spat_2",
+                                          "fit5_spat_2","fit2_spat")) %>% 
+  ggplot() +
+  geom_sf(aes(fill=.estimate),lwd=0.1) +
+  scale_fill_distiller(palette="Reds",direction=1,name="smape", limits = c(0,30)) +
+  facet_wrap(vars(modelo), nrow = 1) +
+  theme_minimal(base_size = 8) +
+  theme(strip.text = element_text(face = "bold",size = 20),
+        legend.position = "bottom")
+```
+## MSE (bias + variance)
+
+```{r}
+mse_area<-
+  bind_cols(
+distritos_sf_predict_prop %>% 
+  select(year,ubigeo,fit10_spat:real_cases) %>% 
+  pivot_longer(cols = c(fit10_spat:fit2_spat_4), values_to = "fit", names_to = "modelo"),
+
+distritos_sf_predict_prop %>% 
+  select(year,ubigeo,fit10_spatvar:fit2_spat_4var) %>% 
+  
+  pivot_longer(cols = c(fit10_spatvar:fit2_spat_4var), values_to = "fit_var", names_to = "modelo_var") %>% 
+  select(-year,-ubigeo)
+) %>% 
+  select(year,ubigeo,real_cases,modelo,fit,fit_var) %>% 
+  
+  mutate(
+    bias2 = (fit - real_cases)^2,
+    variance = fit_var,
+    mse = bias2 + variance
+  )
+
+mse_area_long<-
+  mse_area %>% 
+  pivot_longer(cols = c(mse,bias2, variance)) %>% 
+   mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>% 
+  filter(
+    modelo %in% c("fit10_spat_2","fit8_spat_2","fit5_spat_2","fit2_spat_2")
+  )
+
+
+mse_area_year<-
+  mse_area %>% 
+  group_by(modelo, year) %>%
+  summarise(
+    bias2 = mean(bias2, na.rm = TRUE),
+    variance = mean(variance, na.rm = TRUE),
+    mse = mean(mse, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  pivot_longer(cols = c(mse,bias2, variance)) %>% 
+   mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>% 
+  filter(
+    modelo %in% c("fit10_spat_2","fit8_spat_2","fit5_spat_2","fit2_spat_2")
+  )
+
+
+
+ggplot(mse_area_long, aes(x = as.character(year), y = log(value), 
+                          color = modelo, shape = modelo)) +
+  scale_shape_manual(values = c("fit10_spat_2" = 15,
+                               "fit8_spat_2" = 16,
+                               "fit5_spat_2" = 17,
+                               "fit2_spat_2" = 18))+
+  #scale_color_viridis(discrete = T, option = "B", direction = -1) + 
+  geom_point(alpha = 0.2) +  # puntos pequeños por área
+  geom_point(
+    data = mse_area_year,
+    aes(x = as.character(year), y = log(value)),
+    size = 3,
+    alpha = 0.9
+  ) +
+  facet_wrap(~name) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor =element_blank()
+  )
+```
+
+## Table of general metrics (2)
+```{r}
+bind_cols(
+model_metrics %>% 
+  arrange(Modelo),
+
+tbl.yrd.full %>% 
+  pivot_wider(id_cols = modelo,
+              names_from = .metric,
+              values_from = .estimate) %>% 
+  arrange(modelo),
+
+data.cpo %>% 
+  pivot_longer(cols=colnames(data.cpo),
+               names_to = "model",
+               values_to = "CPO") %>% 
+  arrange(model)
+) %>% 
+  select(Modelo,DIC,pD,WAIC,pWAIC,logML,mae,mase,smape,rmse,CPO) %>% 
+  
+  arrange(smape) %>% 
+  gt() %>% 
+  tab_header(title = md("**General metrics: model diagnosis, errors, LOO-CV**"),
+             subtitle = md("**Count values**" )) %>% 
+  tab_style(
+    style = list(
+       #cell_fill(color = "#FFF3B0"),  # amarillo claro
+      # cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = Modelo %in% c("Modelo 10-2","Modelo 5-2","Modelo 2-2")
+    )
+  )
+```
+# cross validation
+```{r}
+cpo.10cp.sp <- -2*sum(log(model_fit10spat_1$cpo$cpo),na.rm = T)
+cpo.10cp.sp2 <- -2*sum(log(model_fit10spat_2$cpo$cpo),na.rm = T)
+cpo.8cp.sp <- -2*sum(log(model_fit8spat_1$cpo$cpo),na.rm = T)
+cpo.8cp.sp2 <- -2*sum(log(model_fit8spat_2$cpo$cpo),na.rm = T)
+cpo.5cp.sp <- -2*sum(log(model_fit5spat_1$cpo$cpo),na.rm = T)
+cpo.5cp.sp2 <- -2*sum(log(model_fit5spat_2$cpo$cpo),na.rm = T)
+cpo.2cp.sp <- -2*sum(log(model_fit2spat_1$cpo$cpo),na.rm = T)
+cpo.2cp.sp2 <- -2*sum(log(model_fit2spat_2$cpo$cpo),na.rm = T)
+cpo.2cp.sp3 <- -2*sum(log(model_fit2spat_3$cpo$cpo),na.rm = T)
+cpo.2cp.sp4 <- -2*sum(log(model_fit2spat_4$cpo$cpo),na.rm = T)
+
+data.cpo  <-  list("modelo10" = cpo.10cp.sp,
+                   "modelo10_2" = cpo.10cp.sp2,
+                   "modelo8" = cpo.8cp.sp,
+                   "modelo8_2" = cpo.8cp.sp2,
+                   "modelo5" = cpo.5cp.sp,
+                   "modelo5_2" = cpo.5cp.sp2,
+                   "modelo2" = cpo.2cp.sp,
+                   "modelo2_2" = cpo.2cp.sp2,
+                   "modelo2_3" = cpo.2cp.sp3,
+                   "modelo2_4" = cpo.2cp.sp4) %>% 
+  as.data.frame()
+```
+
+# Visualization 
+
+#### Real values of edu level
+
+##### Absolute values
 ```{r}
 # real values of edu level
 graficos<-
@@ -704,9 +988,60 @@ graficos<-
 graficos$graph
 ```
 
+##### Relative values (proportions)
 
+```{r}
+library(ggh4x)
 
-# calculation proportions with cases predicted
+graficos_prop<-
+  distritos_sf_predict_prop %>% 
+  st_drop_geometry() %>% 
+  select(year,ubigeo,pop_landscan,real_cases,fit10_spat:fit2_spat_4) %>% 
+  pivot_longer(cols = fit10_spat:fit2_spat_2) %>% 
+  mutate(
+    dif = real_cases - value
+  ) %>% 
+  
+  group_by(name) %>% 
+  nest() %>% 
+  
+  mutate(
+    data_graph = map(.x = data,
+                     .f = ~.x %>% pivot_longer(cols = c(real_cases,value))),
+    
+    graph = map2(.x = data_graph, .y = name,
+                .f = ~.x %>% ggplot(aes(x = value, y=ubigeo, col = name))+
+                  geom_point(alpha = 0.5, aes(size = pop_landscan))+
+                  geom_line(aes(group = ubigeo))+
+                  facet_wrap(~year, scales = "free",nrow = 2)+
+                  
+                  facetted_pos_scales(
+                    y = list(
+                      `2010` = scale_y_discrete(),
+                      `2011` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2012` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2013` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2014` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2015` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2016` = scale_y_discrete(),
+                      `2017` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2018` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2019` = scale_y_discrete(labels = NULL, breaks = NULL),
+                      `2020` = scale_y_discrete(labels = NULL, breaks = NULL))
+                    ) +
+                  theme_bw() +
+                  theme(legend.position = "bottom",
+                        axis.text.y = element_text(size = 7),
+                        panel.grid = element_blank())+
+                  ggtitle(name))
+  )
+```
+
+```{r}
+graficos_prop$graph[[8]]
+```
+
+#### Calculation proportions with cases predicted
 ```{r}
 prop_sae_predict_wi<-
   distritos_sf_predict %>% 
@@ -715,24 +1050,27 @@ prop_sae_predict_wi<-
   mutate(
     across(.cols = c(real_cases:fit2_spat_4), .f=~.x/pop_landscan)
   )
-
-
-# prop_sae_predict_wi %>% 
-#   pivot_longer(cols = real_cases:fit10_spat) %>% 
-#   mutate(
-#     name = factor(name, levels = c("real_cases", "fit2_new", 
-#                                    "fit2_spat", "fit5_spat", 
-#                                    "fit8_spat", "fit10_spat"))
-#   ) %>% 
-#   
-#   ggplot()+
-#   geom_sf(aes(fill = value)) +
-#   scale_fill_viridis(direction = -1,option = "rocket") +
-#   facet_grid(name~year)
 ```
 
 
-# Point and interval estimates of proportions (INLA)
+```{r}
+prop_sae_predict_wi %>%
+  pivot_longer(cols = real_cases:fit2_spat_4) %>%
+  mutate(
+    name = factor(name, levels = c("real_cases", "fit10_spat",
+                                   "fit10_spat_2", "fit8_spat",
+                                   "fit8_spat_2", "fit5_spat",
+                                   "fit5_spat_2","fit2_spat","fit2_spat_2","fit2_spat_4"))
+  ) %>%
+
+  ggplot()+
+  geom_sf(aes(fill = value)) +
+  scale_fill_viridis(direction = -1,option = "rocket") +
+  facet_grid(name~year)
+```
+
+
+### Point and interval estimates of proportions (INLA)
 ```{r}
 modelos <- list( # lista para trabajar en bloque
  
@@ -744,10 +1082,12 @@ modelos <- list( # lista para trabajar en bloque
     modelo_fh5_spatial_2 = model_fit5spat_2,
     modelo_fh2_spatial = model_fit2spat_1,
     modelo_fh2_spatial_2 = model_fit2spat_2,
-    modelo_fh2_spatial_2 = model_fit2spat_4
+    modelo_fh2_spatial_4 = model_fit2spat_4
 )
+```
 
 
+```{r}
 resultados_SAE_loreto_wi <- 
   imap_dfr(modelos, ~{ # formato long de las estimaciones y los IC de cada modelo distrito-año
     data.frame(
@@ -767,7 +1107,8 @@ resultados_SAE_loreto_wi <-
     across(.cols = wi_estimate:upper, .f=~(.x/pop_landscan), .names = '{.col}_prop')
   )
  
-write.csv(resultados_SAE_loreto_wi, "./data/final_data/resultados_SAE_loreto_wi.csv", row.names = F )
+
+#write.csv(resultados_SAE_loreto_wi, "./data/final_data/resultados_SAE_loreto_wi.csv", row.names = F )
 ```
 
 
@@ -780,6 +1121,8 @@ resultados_SAE_loreto_wi %>%
 ```
 
 # accuracy metris vs population
+
+## count values
 ```{r}
 tbl.yrd.dist %>% 
   full_join(
@@ -788,7 +1131,30 @@ tbl.yrd.dist %>%
       summarise(pop_model = sum(pop_landscan))
   ) %>% 
   filter(
-    modelo %in% c("pc2sp","pc2sp_4","pc2new","pc5sp","pc8sp","pc10sp")
+    modelo %in% c("fit10_spat","fit5_spat",
+                  "fit2_spat","fit2_spat_2","fit2_spat_4")
+  ) %>% 
+  
+  ggplot(aes(x = .estimate, y = log(pop_model), col = modelo))+
+  geom_point(aes(shape = modelo), alpha = .5, size = 3)+
+  geom_line(aes(group = ubigeo)) +
+  
+  coord_flip() +
+  
+  facet_wrap(~.metric, scales = "free", ncol = 1)
+```
+
+## prop values
+```{r}
+tbl.yrd.dist_prop %>% 
+  full_join(
+pop_dist %>% 
+  group_by(ubigeo) %>% 
+  summarise(pop_model = sum(pop_landscan))
+) %>% 
+  filter(
+modelo %in% c("fit10_spat","fit5_spat",
+                  "fit2_spat","fit2_spat_2","fit2_spat_4")
   ) %>% 
   
   ggplot(aes(x = .estimate, y = log(pop_model), col = modelo))+
