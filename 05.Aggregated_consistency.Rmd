@@ -5,7 +5,7 @@ date: "2025-05-30"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.height= 10, fig.width= 8)
+#knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.height= 10, fig.width= 8)
 ```
 
 
@@ -15,6 +15,7 @@ library(survey)
 library(janitor)
 library(sf)
 library(viridis)
+library(ggsci)
 
 source("./_functions/functions.R")
 ```
@@ -113,6 +114,77 @@ data_final_nest %>%
     diferencia_significativa = ifelse(p_value < 0.05,"S","NS")
     
   )
+```
+
+```{r, warning=F}
+#### Metrics ----
+perform.metrics <- yardstick::metric_set(mae,smape,rmse)
+perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
+
+##### total metrics----
+tbl.yrd.full <-  validation_edu_depart %>% 
+  group_by(modelo,year) %>%
+  perform.metrics(truth = hv109_recat, estimate = media)
+```
+
+
+```{r, warning=F}
+labelsfacet <- c(
+  "model_pc10" = "Model PC 10",
+  "model_pc2" = "Model PC 02",
+  "model_pc2_2" = "Model PC 02-2",
+  "model_pc5" = "Model PC 05",
+  "model_pc8" = "Model PC 08"
+)
+
+year_estimate_edu<-
+tbl.yrd.full %>% 
+  mutate(
+    .estimate = round(.estimate,3)
+  ) %>% 
+  filter(.metric == "mae") %>% 
+  
+  full_join(
+  validation_edu_depart, by = c("modelo","year")
+  ) %>% 
+  
+  pivot_longer(cols = c(hv109_recat,media)) %>% 
+  mutate(
+    mae2 = as.factor(ifelse(.estimate <=0.03,"< 3%",
+                                  ifelse(.estimate >0.03 & 
+                                           .estimate <=0.05,"3-5%",
+                                         ifelse(.estimate >0.05 & 
+                                                  .estimate <=0.065,"5-7%", NA)))),
+    
+    
+    modelo = factor(modelo, levels = c("model_pc2","model_pc2_2",
+                                       "model_pc5","model_pc8",
+                                       "model_pc10"))
+  ) %>% 
+  ggplot()+
+  geom_point(aes(x = as.factor(year), y = value, col = name, size = mae2)) +
+  # scale_y_continuous(limits = c(0.76,.82),
+  #                    breaks = seq(0.76,.82, by = 0.02)) +
+  scale_color_aaas() +
+  theme_minimal() +
+  labs(color = NULL,
+       size = "MAE",
+       x = "Year",
+       y = "Prop.%") +
+  guides(
+  color = guide_legend(order = 1),
+  size = guide_legend(order = 2)
+  ) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor= element_blank(),
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+    #legend.box = "vertical"
+  ) +
+  facet_wrap(~modelo,scales = "free",  labeller = labeller(modelo = labelsfacet))
 ```
 
 ### graph edu
@@ -225,13 +297,9 @@ validation_edu_depart_graph2<-
 ```{r}
 modelos<- list(model_pc2=model_fit2spat_1,
                model_pc2_2=model_fit2spat_2,
+               model_pc2_4=model_fit2spat_4,
                model_pc5=model_fit5spat_1,
-               model_pc8=model_fit8spat_1,
-               model_pc10=model_fit10spat_1,
-               
-               model_pc5_2=model_fit5spat_2,
-               model_pc8_2=model_fit8spat_2,
-               model_pc10_2=model_fit10spat_2)
+               model_pc10=model_fit10spat_1)
 
 predict_sae_loreto <- imap_dfr(
   .x = modelos,
@@ -264,6 +332,81 @@ validation_wi_dep<-
     diferencia_significativa = ifelse(p_value < 0.05,"S","NS")
     
   )
+```
+
+```{r, warning=F}
+#### Metrics ----
+perform.metrics <- yardstick::metric_set(mae,smape,rmse)
+perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
+
+##### total metrics----
+tbl.yrd.full <-  validation_wi_dep %>% 
+  group_by(modelo,year) %>%
+  perform.metrics(truth = hv270_recat, estimate = media)
+```
+
+
+```{r, warning=F}
+
+labelsfacet2 <- c(
+  "model_pc10" = "Model PC 10",
+  "model_pc2" = "Model PC 02",
+  "model_pc2_2" = "Model PC 02-2",
+  "model_pc2_4" = "Model PC 02-4",
+  "model_pc5" = "Model PC 05"
+)
+
+year_estimate_wi<-
+tbl.yrd.full %>% 
+  mutate(
+    .estimate = round(.estimate,3)
+  ) %>% 
+  filter(.metric == "mae") %>% 
+  
+  full_join(
+  validation_wi_dep, by = c("modelo","year")
+  ) %>% 
+  
+  pivot_longer(cols = c(hv270_recat,media)) %>% 
+  mutate(
+    mae2 = as.factor(ifelse(.estimate <=0.03,"< 3%",
+                                  ifelse(.estimate >0.03 & 
+                                           .estimate <=0.05,"3-5%",
+                                         ifelse(.estimate >0.05 & 
+                                                  .estimate <=0.07,"5-7%", NA)))),
+    
+    name = ifelse(name == "hv270_recat","Direct estimate","Predicted value"),
+    
+    modelo = factor(modelo, levels = c("model_pc2","model_pc2_2",
+                                       "model_pc2_4","model_pc5",
+                                       "model_pc10"))
+  ) %>% 
+  ggplot()+
+  geom_point(aes(x = as.factor(year), y = value, col = name, size = mae2)) +
+  # scale_y_continuous(limits = c(0.68,.85),
+  #                    breaks = seq(0.68,.85, by = 0.02)) +
+  scale_color_aaas() +
+  theme_minimal() +
+  labs(color = NULL,
+       size = "MAE",
+       x = "Year",
+       y = "Prop.%") +
+  guides(
+  color = guide_legend(order = 1),
+  size = guide_legend(order = 2)
+  ) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor= element_blank(),
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+    #legend.box = "vertical"
+  ) +
+  facet_wrap(~modelo,scales = "free", labeller = labeller(modelo = labelsfacet2))
+
+
 ```
 
 ### graph wi
@@ -407,9 +550,20 @@ plot_grid(plot_grid(g2,g3,g4,g5,nrow = 1,labels = c("A","","B","")),
           legend, nrow = 2, rel_heights =c(0.8,0.1))
 
 ggsave("./figures/graph1.png", dpi = 800, bg = "white", height = 10, width = 16)
+```
 
 
+```{r}
+year_estimate_wi
+year_estimate_edu
 
+g1 <- year_estimate_wi + theme(legend.position = "none")
+g2 <- year_estimate_edu + theme(legend.position = "none")
+legend <- get_legend2(year_estimate_wi)
+
+plot_grid(g2,g1,legend,ncol = 1, rel_heights = c(0.9,0.9,0.05), labels = c("A","B"))
+
+ggsave("./figures/figtest.png", dpi = 800, bg = "white",width = 14, height = 9)
 ```
 
 ```{r}
