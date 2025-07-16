@@ -26,6 +26,7 @@ library(car)
 library(yardstick)
 library(gt)
 library(viridis)
+library(ggsci)
 ```
 
 # Data
@@ -131,8 +132,10 @@ summary(model_poisson)
 
 model_nb <- inla(
   formula = cases_number ~ 1 + 
-    f(id.sp, model = "bym", graph = w.loreto) +   # efecto espacial
-    f(year, model = "ar1"),                       # efecto temporal
+    f(id.sp, model = "bym2", graph = w.loreto) +
+    f(year_re, model = "ar1") +
+    f(id.sp2, model = "bym2", graph = w.loreto, group = year_re,
+      control.group = list(model = "ar1")),                       # efecto temporal
   
   data = wi_censo_final2,
   family = "nbinomial",
@@ -491,6 +494,8 @@ map10sp_2 <-
 
 ```{r}
 cowplot::plot_grid(map.direct_est,map2sp,map5sp,map8sp,map10sp,map10sp_2)
+
+ggsave("./figures/prueba.png", dpi = 300, bg = "white")
 ```
 
 ## Comparison DE vs Pred. SAE ----
@@ -728,29 +733,72 @@ distritos_sf_predict_prop<-
   st_as_sf()
 ```
 
+
+```{r}
+estimate_prop_wi <-
+  distritos_sf_predict_prop %>% 
+  select(ubigeo,year,real_cases,fit2_spat_2) %>% 
+  filter(year %in% c(2010,2013,2017,2020)) %>% 
+  pivot_longer(cols = c(real_cases:fit2_spat_2)) %>% 
+  mutate(
+    name = factor(name, levels = c("real_cases","fit2_spat_2"), labels = c("Direct estimate","PC 02-2"))
+  ) %>% 
+  ggplot()+
+  geom_sf(aes(fill=value))+
+  scale_fill_gradient(low = "white", high = "#0061a9")+
+  labs(fill = "Prop.") +
+  theme_void()+
+  theme(
+    strip.text = element_text(face = "bold", size = 10)
+  )+
+  facet_grid(name~year)
+```
+### fig 6
+```{r}
+estimate_prop_edu
+estimate_prop_wi
+
+plot_grid(estimate_prop_edu,estimate_prop_wi,cols = 1, labels = c("A","B"))
+
+ggsave("./figures/fig6.png", dpi = 300, bg = "white", width = 12,height = 10)
+```
+
+
+
+
+
 ## Comparison DE vs Pred. SAE ----
 
 ```{r}
-distritos_sf_predict_prop %>% 
-  select(year,real_cases,fit2_spat_2,fit2_spat_3,fit2_spat_4,fit5_spat,fit10_spat) %>% 
+figura3_a<-
+  distritos_sf_predict_prop %>% 
+  select(year,real_cases,fit2_spat,fit2_spat_2,fit8_spat,fit8_spat_2,fit10_spat_2) %>% 
   st_drop_geometry() %>%
   filter(!is.na(real_cases)) %>%
   rename(directo = real_cases) %>%
   pivot_longer(cols = starts_with("fit"),
                names_to = "modelo",
                values_to = "predicho") %>%
+  mutate(
+    modelo = factor(modelo, 
+                    levels = c("fit2_spat","fit2_spat_2","fit8_spat","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2","Model PC 2-2","Model PC 8","Model PC 8-2","Model PC 10-2"))
+  ) %>% 
   ggplot(aes(x = directo, y = predicho, color = modelo)) +
-  geom_point(alpha = 0.7, size = 2) +
+  geom_point(alpha = 0.5, size = 2, show.legend = F) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray40") +
+  scale_color_lancet() +
   facet_grid(year~modelo) +
   labs(
-    x = "Estimación directa",
-    y = "Predicción del modelo",
-    title = "Comparación de estimaciones directas vs modelos SAE",
-    subtitle = "Línea diagonal = ajuste perfecto"
+    x = "Prop.% (Direct estimation)",
+    y = "Prop.% (Predicted)"
   ) +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(face = "bold"),
+        strip.text = element_text(face ="bold"),
+        legend.title = element_text(face = "bold"))
 ```
 
 ## Performance metrics ----
@@ -783,6 +831,11 @@ tbl.yrd.full <-  fitted_vals %>%
 tbl.yrd.dist_prop <-  fitted_vals %>% 
   group_by(modelo,ubigeo) %>%
   perform.metrics.dist(truth = real_cases, estimate = fit)
+
+##### metrics by years----
+tbl.yrd.full_year <-  fitted_vals %>% 
+  group_by(modelo,year) %>%
+  perform.metrics(truth = real_cases, estimate = fit)
 ```
 
 ## Table in-sample accuracy metrics ----
@@ -804,6 +857,106 @@ tbl.yrd.full %>%
       rows = modelo %in% c("fit8_spat_2","fit2_spat_2")
     )
   )
+```
+
+## mapping the performance metrics
+```{r}
+metrics_wi<-
+  distritos %>% 
+  inner_join(tbl.yrd.dist_prop) %>% 
+  filter(modelo %in% c("fit2_spat","fit2_spat_2","fit8_spat",
+                                        "fit8_spat_2","fit10_spat_2")) %>%
+  mutate(
+    legend_title = .metric
+  ) %>% 
+  
+  group_by(.metric) %>% 
+  nest() %>% 
+  mutate(
+    grafico = map(.x =data,
+                  .f =~ggplot(data = .x) +
+                    geom_sf(aes(fill=.estimate)) +
+                    scale_fill_gradient(low = "white", high = "#0061a9", name =.x$legend_title)+
+                    facet_wrap(~modelo, nrow = 1) +
+                    theme_void())
+  )
+  
+metrics_wi_graph<-plot_grid(plotlist = metrics_wi$grafico, ncol = 1)
+```
+
+### fig 4
+```{r}
+metrics_edu_graph
+metrics_wi_graph
+
+plot_grid(metrics_edu_graph,metrics_wi_graph, ncol = 1, labels = c("A","B"))
+
+ggsave("./figures/fig4.png", dpi = 300, width = 9,height = 14, bg = "white")
+
+```
+
+### heatplot accuracy metrics by year
+
+```{r}
+graph_heatplot<-
+bind_rows(tbl.yrd.full_year,tbl.yrd.full) %>% 
+  mutate(
+    year2 = ifelse(is.na(year),"T. model",year)
+  ) %>% 
+  
+  filter(
+    modelo %in% c("fit2_spat","fit2_spat_2","fit8_spat",
+                  "fit8_spat_2","fit10_spat_2") &
+      
+      .metric != "mase"
+  ) %>% 
+  mutate(
+    labels = round(.estimate,3),
+    legend_title = .metric,
+    
+    modelo = factor(modelo, 
+                    levels = c("fit2_spat","fit2_spat_2","fit8_spat",
+                               "fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2","Model PC 2-2","Model PC 8",
+                               "Model PC 8-2","Model PC 10-2"))
+  ) %>% 
+  group_by(.metric) %>% 
+  nest() %>% 
+  
+  mutate(
+    grafico = map(.x = data,
+                  .f = ~ggplot(data = .x)+
+                    geom_tile(aes(x = modelo, y = as.factor(year2), fill = .estimate), alpha = .8, show.legend = F) +
+                    geom_text(aes(x = modelo, y = as.factor(year2),label =labels), size = 3) +
+                    scale_fill_tw3("blue")+
+                    labs(
+                      fill = NULL,
+                      y = NULL,
+                      x = .x$legend_title
+                    ) +
+                    
+                    theme_minimal() +
+                    scale_x_discrete(position = "top")+
+                    theme(
+                      axis.title.x = element_text(face = "bold"),
+                      axis.text = element_text(face = "bold", size = 8),
+                      strip.text = element_text(face ="bold"),
+                      legend.title = element_text(face = "bold", size = 8)
+                    )
+    )
+  )
+
+figura2_b<-cowplot::plot_grid(plotlist = graph_heatplot$grafico, rows = 1)
+figura2_b
+```
+
+### Figure 3
+```{r}
+cowplot::plot_grid(figura3_a,figura2_b, 
+                   cols = 1, 
+                   rel_heights = c(.65,.4),labels = c("A","B"))
+
+ggsave("./figures/fig3.png", dpi = 800, bg = "white", width = 15, height = 10)
 ```
 
 ### mapping the performance metrics
@@ -848,7 +1001,8 @@ mse_area_long<-
   pivot_longer(cols = c(mse,bias2, variance)) %>% 
    mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>% 
   filter(
-    modelo %in% c("fit10_spat_2","fit8_spat_2","fit5_spat_2","fit2_spat_2")
+    modelo %in% c("fit2_spat","fit2_spat_2","fit8_spat",
+                                        "fit8_spat_2","fit10_spat_2")
   )
 
 
@@ -864,30 +1018,56 @@ mse_area_year<-
   pivot_longer(cols = c(mse,bias2, variance)) %>% 
    mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>% 
   filter(
-    modelo %in% c("fit10_spat_2","fit8_spat_2","fit5_spat_2","fit2_spat_2")
+    modelo %in% c("fit2_spat","fit2_spat_2","fit8_spat",
+                                        "fit8_spat_2","fit10_spat_2")
   )
 
 
 
-ggplot(mse_area_long, aes(x = as.character(year), y = log(value), 
-                          color = modelo, shape = modelo)) +
-  scale_shape_manual(values = c("fit10_spat_2" = 15,
-                               "fit8_spat_2" = 16,
-                               "fit5_spat_2" = 17,
-                               "fit2_spat_2" = 18))+
-  #scale_color_viridis(discrete = T, option = "B", direction = -1) + 
-  geom_point(alpha = 0.2) +  # puntos pequeños por área
+labelsfacet2 <- c(
+  "mse"     = "MSE",
+  "bias2"   = "Bias^2",      # superíndice
+  "variance"= "Variance"
+)
+
+mse_wi <-
+  ggplot(mse_area_long, aes(x = as.character(year), y = log(value), 
+                            color = modelo, shape = modelo)) +
+  geom_point(alpha = 0.1) +
   geom_point(
     data = mse_area_year,
     aes(x = as.character(year), y = log(value)),
     size = 3,
     alpha = 0.9
   ) +
-  facet_wrap(~name) +
+  scale_color_lancet() +
+  labs(
+    x = "years",
+    y = "log(value)",
+    color = "Model",
+    shape = "Model"
+  ) +
+  facet_wrap(
+    ~name, 
+    labeller = labeller(name = labelsfacet2, .default = label_parsed)
+  ) +
   theme_minimal() +
   theme(
-    panel.grid.minor =element_blank()
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 8)
   )
+```
+
+### fig 5
+```{r}
+mse_wi
+mse_edu
+
+plot_grid(mse_edu,mse_wi, ncol = 1, labels = c("A","B"))
+
+ggsave("./figures/fig5.png", dpi = 300, bg = "white", width = 12, height = 10)
 ```
 
 ## Table of general metrics (2)
