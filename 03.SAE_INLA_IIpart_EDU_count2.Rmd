@@ -27,6 +27,7 @@ library(yardstick)
 library(gt)
 library(viridis)
 library(ggsci)
+library(cowplot)
 ```
 
 # Data
@@ -664,11 +665,11 @@ distritos_sf_predict_prop<-
 ```{r}
 estimate_prop_edu <-
   distritos_sf_predict_prop %>% 
-  select(ubigeo,year,estimacion_real,fit8_spat_2) %>% 
+  select(ubigeo,year,estimacion_real,fit2_spat_2) %>% 
   filter(year %in% c(2010,2013,2017,2020)) %>% 
-  pivot_longer(cols = c(estimacion_real:fit8_spat_2)) %>% 
+  pivot_longer(cols = c(estimacion_real:fit2_spat_2)) %>% 
   mutate(
-    name = factor(name, levels = c("estimacion_real","fit8_spat_2"), labels = c("Direct estimate","PC 08-2"))
+    name = factor(name, levels = c("estimacion_real","fit2_spat_2"), labels = c("Direct estimate","PC 02-2"))
   ) %>% 
   ggplot()+
   geom_sf(aes(fill=value))+
@@ -686,7 +687,7 @@ estimate_prop_edu <-
 ```{r}
 figura2_a<-
   distritos_sf_predict_prop %>% 
-  select(year,estimacion_real,fit2_spat_2,fit8_spat_2,fit10_spat_2,fit5_spat_2,fit2_spat) %>% 
+  select(year,estimacion_real,fit2_spat_2,fit8_spat_2,fit10_spat_2,fit5_spat_2,fit2_spat_4) %>% 
   st_drop_geometry() %>%
   filter(!is.na(estimacion_real)) %>%
   rename(directo = estimacion_real) %>%
@@ -695,8 +696,8 @@ figura2_a<-
                values_to = "predicho") %>%
   mutate(
     modelo = factor(modelo, 
-                    levels = c("fit2_spat","fit2_spat_2","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
-                    labels = c("Model PC 2","Model PC 2-2","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
+                    levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
   ) %>% 
   ggplot(aes(x = directo, y = predicho, color = modelo)) +
   geom_point(alpha = 0.5, size = 2, show.legend = F) +
@@ -783,7 +784,10 @@ metrics_edu<-
   filter(modelo %in% c("fit2_spat_2","fit2_spat_4","fit5_spat_2",
                                         "fit8_spat_2","fit10_spat_2")) %>%
   mutate(
-    legend_title = .metric
+    legend_title = .metric,
+    modelo = factor(modelo, 
+                    levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
   ) %>% 
   
   group_by(.metric) %>% 
@@ -797,7 +801,7 @@ metrics_edu<-
                     theme_void())
   )
   
-metrics_edu_graph<-plot_grid(plotlist = metrics_edu$grafico, ncol = 1)
+metrics_edu_graph<-cowplot::plot_grid(plotlist = metrics_edu$grafico, ncol = 1)
 ```
 
 ## heatplot accuracy metrics by year
@@ -811,7 +815,7 @@ bind_rows(tbl.yrd.full_year,tbl.yrd.full) %>%
   
   filter(
     modelo %in% c("fit8_spat_2","fit2_spat_2","fit10_spat_2",
-                  "fit5_spat_2","fit2_spat") &
+                  "fit5_spat_2","fit2_spat_4") &
       
       .metric != "mase"
   ) %>% 
@@ -820,8 +824,8 @@ bind_rows(tbl.yrd.full_year,tbl.yrd.full) %>%
     legend_title = .metric,
     
     modelo = factor(modelo, 
-                    levels = c("fit2_spat","fit2_spat_2","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
-                    labels = c("Model PC 2","Model PC 2-2","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
+                    levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
   ) %>% 
   group_by(.metric) %>% 
   nest() %>% 
@@ -859,7 +863,7 @@ cowplot::plot_grid(figura2_a,figura2_b,
                    cols = 1, 
                    rel_heights = c(.65,.4),labels = c("A","B"))
 
-ggsave("./figures/fig2.png", dpi = 800, bg = "white", width = 15, height = 10)
+#ggsave("./figures/fig2.png", dpi = 800, bg = "white", width = 15, height = 10)
 ```
 
 ## MSE (bias + variance)
@@ -1173,7 +1177,7 @@ resultados_SAE_loreto_edu <-
     across(.cols = edu_estimate:upper, .f=~(.x/pop_landscan), .names = '{.col}_prop')
   )
 
-# write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
+#write.csv(resultados_SAE_loreto_edu, "./data/final_data/resultados_SAE_loreto_edu.csv", row.names = F )
 ```
 
 

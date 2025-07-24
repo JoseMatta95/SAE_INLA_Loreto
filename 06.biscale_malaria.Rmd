@@ -25,9 +25,9 @@ distritos <- Peru %>% filter(dep == "LORETO") %>% mutate(ubigeo = as.integer(ubi
 ```
 
 ```{r}
-wi_sae_fh2<- wi_sae %>% filter(modelo =="modelo_fh2_spatial")
+wi_sae_fh2<- wi_sae %>% filter(modelo =="modelo_fh2_spatial_2")
 
-edu_sae_fh2<- edu_sae %>% filter(modelo =="modelo_fh2_spatial")
+edu_sae_fh2<- edu_sae %>% filter(modelo =="modelo_fh2_spatial_2")
 ```
 
 
@@ -59,11 +59,20 @@ data<-
   mutate(
     year = as.character(year)
   )
+
+data2<-
+   malaria_dist_specie %>% 
+  full_join(wi_sae_fh2, by = c('year','ubigeo')) %>% 
+  mutate(
+    year = as.character(year)
+  )
 ```
 
 
 ```{r}
-data_bi <- bi_class(data, y = mean, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi <- bi_class(data, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+
+data_bi2 <- bi_class(data2, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 ```
 
 
@@ -72,27 +81,49 @@ map <-
   ggplot() +
   geom_sf(data = data_bi, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
   bi_scale_fill(pal = "DkViolet", dim = 3) +
-  labs(
-    title = "Malaria incidence distribution across WI level"
-  ) +
  theme_void() +
-  facet_wrap(~year)
+  facet_wrap(~year, ncol = 3)
+```
+
+
+```{r}
+map2<-
+  ggplot() +
+  geom_sf(data = data_bi2 %>% 
+            filter(year %in% c(2010,2013,2017,2020)),
+          mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkViolet", dim = 3) +
+  theme_void() +
+  facet_grid(enfermedad~year)
 ```
 
 
 ```{r}
 legend <- bi_legend(pal = "DkViolet",
                     dim = 3,
-                    xlab = "% poverty",
-                    ylab = "malaria incidence",
+                    xlab = "malaria incidence",
+                    ylab = "% poverty",
                     size = 8)
 ```
 
 
 ```{r}
- ggdraw() +
+ggdraw() +
   draw_plot(map, 0, 0, 1, 1) +
-  draw_plot(legend, 0.65, .1, 0.2, 0.2)
+  draw_plot(legend, 0.65, .08, 0.2, 0.2)
+```
+
+
+```{r}
+ggdraw() +
+  draw_plot(map2, 0, 0, 1, 1) +
+  draw_plot(legend, 0.65, .08, 0.13, 0.15)
+```
+
+
+```{r}
+ggsave("./figures/fig8.png", dpi = 300, bg = "white", width = 9, height = 10)
+
 ```
 
 # EDUCACION -----
@@ -103,11 +134,21 @@ data<-
   mutate(
     year = as.character(year)
   )
+
+
+data2<-
+   malaria_dist_specie %>% 
+  full_join(edu_sae_fh2, by = c('year','ubigeo')) %>% 
+  mutate(
+    year = as.character(year)
+  )
 ```
 
 
 ```{r}
-data_bi <- bi_class(data, y = mean, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi <- bi_class(data, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+
+data_bi2 <- bi_class(data2, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 ```
 
 
@@ -125,20 +166,40 @@ map <-
 
 
 ```{r}
+map2<-
+  ggplot() +
+  geom_sf(data = data_bi2 %>% 
+            filter(year %in% c(2010,2013,2017,2020)),
+          mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  bi_scale_fill(pal = "DkViolet", dim = 3) +
+  theme_void() +
+  facet_grid(enfermedad~year)
+```
+
+
+```{r}
 legend <- bi_legend(pal = "DkViolet",
                     dim = 3,
-                    xlab = "% primary education",
-                    ylab = "malaria incidence",
+                    xlab = "malaria incidence",
+                    ylab = "% primary education",
                     size = 8)
 ```
 
 
 ```{r}
- ggdraw() +
+ggdraw() +
   draw_plot(map, 0, 0, 1, 1) +
-  draw_plot(legend, 0.65, .1, 0.2, 0.2)
+  draw_plot(legend, 0.65, .08, 0.2, 0.2)
+```
 
-ggsave("./edu_biscale_malaria.png", dpi = 300, bg = "white", width = 8, height = 9)
+```{r}
+ggdraw() +
+  draw_plot(map2, 0, 0, 1, 1) +
+  draw_plot(legend, 0.65, .08, 0.13, 0.15)
+```
+
+```{r}
+ggsave("./figures/fig9.png", dpi = 300, bg = "white", width = 9, height = 10)
 ```
 
 ```{r}

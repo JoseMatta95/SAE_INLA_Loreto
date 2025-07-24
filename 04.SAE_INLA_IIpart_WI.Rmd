@@ -495,7 +495,7 @@ map10sp_2 <-
 ```{r}
 cowplot::plot_grid(map.direct_est,map2sp,map5sp,map8sp,map10sp,map10sp_2)
 
-ggsave("./figures/prueba.png", dpi = 300, bg = "white")
+#ggsave("./figures/prueba.png", dpi = 300, bg = "white")
 ```
 
 ## Comparison DE vs Pred. SAE ----
@@ -760,7 +760,7 @@ estimate_prop_wi
 
 plot_grid(estimate_prop_edu,estimate_prop_wi,cols = 1, labels = c("A","B"))
 
-ggsave("./figures/fig6.png", dpi = 300, bg = "white", width = 12,height = 10)
+#ggsave("./figures/fig6.png", dpi = 300, bg = "white", width = 12,height = 10)
 ```
 
 
@@ -867,7 +867,12 @@ metrics_wi<-
   filter(modelo %in% c("fit2_spat","fit2_spat_2","fit8_spat",
                                         "fit8_spat_2","fit10_spat_2")) %>%
   mutate(
-    legend_title = .metric
+    legend_title = .metric,
+    modelo = factor(modelo, 
+                    levels = c("fit2_spat","fit2_spat_2","fit8_spat",
+                               "fit8_spat_2","fit10_spat_2"),
+                    labels = c("Model PC 2","Model PC 2-2","Model PC 8",
+                               "Model PC 8-2","Model PC 10-2"))
   ) %>% 
   
   group_by(.metric) %>% 
@@ -891,7 +896,7 @@ metrics_wi_graph
 
 plot_grid(metrics_edu_graph,metrics_wi_graph, ncol = 1, labels = c("A","B"))
 
-ggsave("./figures/fig4.png", dpi = 300, width = 9,height = 14, bg = "white")
+#ggsave("./figures/fig4.png", dpi = 300, width = 9,height = 14, bg = "white")
 
 ```
 
@@ -956,7 +961,7 @@ cowplot::plot_grid(figura3_a,figura2_b,
                    cols = 1, 
                    rel_heights = c(.65,.4),labels = c("A","B"))
 
-ggsave("./figures/fig3.png", dpi = 800, bg = "white", width = 15, height = 10)
+#ggsave("./figures/fig3.png", dpi = 800, bg = "white", width = 15, height = 10)
 ```
 
 ### mapping the performance metrics
@@ -1067,7 +1072,54 @@ mse_edu
 
 plot_grid(mse_edu,mse_wi, ncol = 1, labels = c("A","B"))
 
-ggsave("./figures/fig5.png", dpi = 300, bg = "white", width = 12, height = 10)
+#ggsave("./figures/fig5.png", dpi = 300, bg = "white", width = 12, height = 10)
+```
+
+
+# cross validation
+```{r}
+cpo.10cp.sp <- -2*sum(log(model_fit10spat_1$cpo$cpo),na.rm = T)
+cpo.10cp.sp2 <- -2*sum(log(model_fit10spat_2$cpo$cpo),na.rm = T)
+cpo.8cp.sp <- -2*sum(log(model_fit8spat_1$cpo$cpo),na.rm = T)
+cpo.8cp.sp2 <- -2*sum(log(model_fit8spat_2$cpo$cpo),na.rm = T)
+cpo.5cp.sp <- -2*sum(log(model_fit5spat_1$cpo$cpo),na.rm = T)
+cpo.5cp.sp2 <- -2*sum(log(model_fit5spat_2$cpo$cpo),na.rm = T)
+cpo.2cp.sp <- -2*sum(log(model_fit2spat_1$cpo$cpo),na.rm = T)
+cpo.2cp.sp2 <- -2*sum(log(model_fit2spat_2$cpo$cpo),na.rm = T)
+cpo.2cp.sp3 <- -2*sum(log(model_fit2spat_3$cpo$cpo),na.rm = T)
+cpo.2cp.sp4 <- -2*sum(log(model_fit2spat_4$cpo$cpo),na.rm = T)
+
+data.cpo  <-  list("modelo10" = cpo.10cp.sp,
+                   "modelo10_2" = cpo.10cp.sp2,
+                   "modelo8" = cpo.8cp.sp,
+                   "modelo8_2" = cpo.8cp.sp2,
+                   "modelo5" = cpo.5cp.sp,
+                   "modelo5_2" = cpo.5cp.sp2,
+                   "modelo2" = cpo.2cp.sp,
+                   "modelo2_2" = cpo.2cp.sp2,
+                   "modelo2_3" = cpo.2cp.sp3,
+                   "modelo2_4" = cpo.2cp.sp4) %>% 
+  as.data.frame()
+```
+
+
+```{r}
+data.cpo %>% 
+  pivot_longer(cols=colnames(data.cpo),
+               names_to = "model",
+               values_to = "CPO")  %>% 
+  arrange(CPO) %>% 
+  gt() %>%
+  tab_header(title = md("LOO-CV")) %>% 
+  tab_style(
+    style = list(
+      # cell_fill(color = "#FFF3B0"),  # amarillo claro
+      # cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      rows = model %in% c("modelo2spat_2")
+    )
+  )
 ```
 
 ## Table of general metrics (2)
@@ -1103,31 +1155,6 @@ data.cpo %>%
       rows = Modelo %in% c("Modelo 10-2","Modelo 5-2","Modelo 2-2")
     )
   )
-```
-# cross validation
-```{r}
-cpo.10cp.sp <- -2*sum(log(model_fit10spat_1$cpo$cpo),na.rm = T)
-cpo.10cp.sp2 <- -2*sum(log(model_fit10spat_2$cpo$cpo),na.rm = T)
-cpo.8cp.sp <- -2*sum(log(model_fit8spat_1$cpo$cpo),na.rm = T)
-cpo.8cp.sp2 <- -2*sum(log(model_fit8spat_2$cpo$cpo),na.rm = T)
-cpo.5cp.sp <- -2*sum(log(model_fit5spat_1$cpo$cpo),na.rm = T)
-cpo.5cp.sp2 <- -2*sum(log(model_fit5spat_2$cpo$cpo),na.rm = T)
-cpo.2cp.sp <- -2*sum(log(model_fit2spat_1$cpo$cpo),na.rm = T)
-cpo.2cp.sp2 <- -2*sum(log(model_fit2spat_2$cpo$cpo),na.rm = T)
-cpo.2cp.sp3 <- -2*sum(log(model_fit2spat_3$cpo$cpo),na.rm = T)
-cpo.2cp.sp4 <- -2*sum(log(model_fit2spat_4$cpo$cpo),na.rm = T)
-
-data.cpo  <-  list("modelo10" = cpo.10cp.sp,
-                   "modelo10_2" = cpo.10cp.sp2,
-                   "modelo8" = cpo.8cp.sp,
-                   "modelo8_2" = cpo.8cp.sp2,
-                   "modelo5" = cpo.5cp.sp,
-                   "modelo5_2" = cpo.5cp.sp2,
-                   "modelo2" = cpo.2cp.sp,
-                   "modelo2_2" = cpo.2cp.sp2,
-                   "modelo2_3" = cpo.2cp.sp3,
-                   "modelo2_4" = cpo.2cp.sp4) %>% 
-  as.data.frame()
 ```
 
 # Visualization 
