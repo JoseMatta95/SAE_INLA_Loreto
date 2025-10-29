@@ -73,11 +73,11 @@ data_final_nest<-
 ```{r}
 # 2. The district-level estimates by year will be aggregated to the department-year level
 
-modelos<- list(model_pc2=modelo_fh2_spatial_edu_2,
-               model_pc2_2=modelo_fh2_spatial_edu_4,
-               model_pc5=modelo_fh5_spatial_edu_2,
-               model_pc8=modelo_fh8_spatial_edu_2,
-               model_pc10=modelo_fh10_spatial_edu_2)
+modelos<- list(modelo_fh2_spatial_edu_2=modelo_fh2_spatial_edu_2,
+               modelo_fh2_spatial_edu_4=modelo_fh2_spatial_edu_4,
+               modelo_fh5_spatial_edu_2=modelo_fh5_spatial_edu_2,
+               modelo_fh8_spatial_edu_2=modelo_fh8_spatial_edu_2,
+               modelo_fh10_spatial_edu_2=modelo_fh10_spatial_edu_2)
 
 predict_sae_loreto <- imap_dfr(
   .x = modelos,
@@ -130,14 +130,14 @@ tbl.yrd.full <-  validation_edu_depart %>%
 
 ```{r, warning=F}
 labelsfacet <- c(
-  "model_pc10" = "Model PC 10",
-  "model_pc2" = "Model PC 02",
-  "model_pc2_2" = "Model PC 02-2",
-  "model_pc5" = "Model PC 05",
-  "model_pc8" = "Model PC 08"
+  "modelo_fh2_spatial_edu_2" = "Me-2",
+  "modelo_fh2_spatial_edu_4" = "Me-4",
+  "modelo_fh5_spatial_edu_2" = "Me-5",
+  "modelo_fh8_spatial_edu_2" = "Me-8",
+  "modelo_fh10_spatial_edu_2" = "Me-10"
 )
-
 year_estimate_edu<-
+  
 tbl.yrd.full %>% 
   mutate(
     .estimate = round(.estimate,3)
@@ -145,36 +145,57 @@ tbl.yrd.full %>%
   filter(.metric == "mae") %>% 
   
   full_join(
-  validation_edu_depart, by = c("modelo","year")
+    validation_edu_depart %>% 
+      mutate(
+        low_direct = hv109_recat - 1.96*se,
+        upp_direct = hv109_recat + 1.96*se
+      ),
+    
+    by = c("modelo","year")
   ) %>% 
   
-  pivot_longer(cols = c(hv109_recat,media)) %>% 
-  mutate(
-mae2 = as.factor(ifelse(.estimate <=0.03,"< 0.3",
+  select(year,modelo,hv109_recat,low_direct,upp_direct,
+         media,li_95,ls_95,.estimate) %>% 
+    mutate(
+      mae2 = as.factor(ifelse(.estimate <=0.03,"<= 0.03",
                                   ifelse(.estimate >0.03 & 
-                                           .estimate <=0.05,"0.3-0.5",
+                                           .estimate <=0.05,"0.03-0.05",
                                          ifelse(.estimate >0.05 & 
-                                                  .estimate <=0.07,"0.5-0.7", NA)))),
+                                                  .estimate <=0.07,"0.05-0.07", NA)))),
     
     
-    modelo = factor(modelo, levels = c("model_pc2","model_pc2_2",
-                                       "model_pc5","model_pc8",
-                                       "model_pc10"))
+    modelo = factor(modelo, levels = c("modelo_fh2_spatial_edu_2","modelo_fh2_spatial_edu_4",
+                                       "modelo_fh5_spatial_edu_2","modelo_fh8_spatial_edu_2",
+                                       "modelo_fh10_spatial_edu_2"))
   ) %>% 
+  
   ggplot()+
-  geom_point(aes(x = as.factor(year), y = value, col = name, size = mae2)) +
-  # scale_y_continuous(limits = c(0.76,.82),
-  #                    breaks = seq(0.76,.82, by = 0.02)) +
-  scale_color_lancet() +
+  
+  geom_pointrange(aes(x =hv109_recat, y = as.factor(year), 
+                      xmin = low_direct, xmax = upp_direct,
+                      color = "Direct estimate",
+                      size = mae2),
+                  alpha = .5, linewidth = 1.5) +
+  geom_pointrange(aes(x =media, y = as.factor(year),
+                      xmin = li_95, xmax = ls_95,
+                      color = "Predicted value",
+                      size = mae2),
+                  alpha = .5) +
+  
+  scale_color_manual(values = c("Direct estimate" = "red4",
+                                "Predicted value" = "blue4")) +
+  
+  scale_size_manual(
+  values = c("<= 0.03" = 0.5,
+             "0.03-0.05" = 0.8,
+             "0.05-0.07" = 1.1),
+  name = "MAE"
+) +
+  
   theme_minimal() +
   labs(color = NULL,
-       size = "MAE",
        x = "Year",
        y = "Prop.") +
-  guides(
-  color = guide_legend(order = 1),
-  size = guide_legend(order = 2)
-  ) +
   theme(
     legend.position = "bottom",
     panel.grid.minor= element_blank(),
@@ -184,125 +205,23 @@ mae2 = as.factor(ifelse(.estimate <=0.03,"< 0.3",
     axis.title = element_text(face = "bold")
     #legend.box = "vertical"
   ) +
-  facet_wrap(~modelo,scales = "free",  labeller = labeller(modelo = labelsfacet))
-```
+  facet_wrap(~modelo, scales = "free", labeller = labeller(modelo = labelsfacet)) +
+  coord_flip()
 
-### graph edu
-```{r}
-validation_edu_depart_graph<-
-  validation_edu_depart %>% 
-  mutate(
-    dif = hv109_recat - media
-  ) %>% 
-  
-  ggplot()+
-  geom_pointrange(alpha = 0.5, aes(x = modelo, y =media,
-                      col = modelo, ymin = li_95, ymax = ls_95))+
-
-  scale_y_continuous(limits = c(0.65,.85),
-                     breaks = seq(0.65,.85, by = 0.02))+ 
-  
-  scale_color_manual(name = "model values",
-                     values = c("model_pc2" = "gray",
-                                "model_pc2_2" = "purple",
-                                "model_pc5" = "red",
-                                "model_pc8"="blue",
-                                "model_pc10" = "green",
-                                "hv270_recat" = "black")) +
-  coord_flip()+
-  
-  facet_grid(rows = vars(year), switch = "y") +
-  
-  theme_minimal() +
-  
-  theme(
-    panel.grid.major=element_blank(),
-    panel.grid.minor=element_blank(),
-    axis.text.y=element_blank(),
-    axis.line=element_line(),
-    strip.placement = "outside",
-    axis.text.x=element_text(face="bold"),
-    strip.text.y = element_text(vjust = 1,size = 10,face="bold"),
-    panel.spacing = unit(1.2, "lines"),
-    legend.position = "none")
-```
-
-
-```{r}
-validation_edu_depart_graph2<-
-  validation_edu_depart %>% 
-  mutate(
-    difference = as.factor(ifelse(hv109_recat - media <=0.03,"< 3%",
-                                  ifelse(hv109_recat - media >0.03 & 
-                                           hv109_recat - media <=0.05,"3-5%",
-                                         ifelse(hv109_recat - media >0.05 & 
-                                                  hv109_recat - media <=0.065,"5-7%", NA))))
-  ) %>% 
-  
-  select(
-    year,hv109_recat,media,modelo,difference
-  ) %>% 
-  pivot_longer(
-    cols = hv109_recat:media
-  ) %>% 
-  mutate(
-    name = ifelse(name == "media",modelo,name)
-  ) %>% 
-  
-  ggplot(aes(x = modelo, y =value, color = name))+
-  
-  geom_point(alpha = .5, aes(size = difference))+
-  geom_line(aes(group = modelo)) +
-
-  
-    scale_y_continuous(limits = c(0.65,.85),
-                     breaks = seq(0.65,.85, by = 0.02)) +
-  
-  scale_size_manual(values = c("< 3%" = 1.5,
-                               "3-5%"= 3,
-                               "5-7%" = 5)) +
-  
-  scale_color_manual(name = "model values",
-                     values = c("model_pc2" = "gray",
-                                "model_pc2_2" = "purple",
-                                "model_pc5" = "red",
-                                "model_pc8"="blue",
-                                "model_pc10" = "green",
-                                "hv270_recat" = "black")) +
-
-  
-  coord_flip()+
-  
-  facet_grid(rows = vars(year), switch = "y") +
-  
-  theme_minimal() +
-  
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text.y = element_blank(),
-    axis.line = element_line(),
-    strip.placement = "outside",
-    axis.text.x = element_text(face = "bold"),
-    strip.text.y = element_text(vjust = 1, size = 10, face = "bold"),
-    
-    # # Color legend stays below
-    legend.position = "bottom",
-    legend.box = "vertical")
 ```
 
 # Aggregated consistency check - WI
 
 ## Departament: Loreto
 ```{r}
-modelos<- list(model_pc2=model_fit2spat_1,
-               model_pc2_2=model_fit2spat_2,
-               model_pc2_4=model_fit2spat_4,
-               model_pc5=model_fit5spat_1,
-               model_pc10=model_fit10spat_1)
+modelos2<- list(model_fit2spat_1=model_fit2spat_1,
+               model_fit2spat_2=model_fit2spat_2,
+               model_fit5spat_2=model_fit5spat_2,
+               model_fit8spat_2=model_fit8spat_2,
+               model_fit10spat_2=model_fit10spat_2)
 
 predict_sae_loreto <- imap_dfr(
-  .x = modelos,
+  .x = modelos2,
   .f = ~ {
     resumen_anual_samples(modelo_inla = .x, data = wi_censo_final2) %>% 
       mutate(modelo = .y) 
@@ -349,11 +268,11 @@ tbl.yrd.full <-  validation_wi_dep %>%
 ```{r, warning=F}
 
 labelsfacet2 <- c(
-  "model_pc10" = "Model PC 10",
-  "model_pc2" = "Model PC 02",
-  "model_pc2_2" = "Model PC 02-2",
-  "model_pc2_4" = "Model PC 02-4",
-  "model_pc5" = "Model PC 05"
+  "model_fit2spat_1" = "Mp-1",
+  "model_fit2spat_2" = "Mp-2",
+  "model_fit5spat_2" = "Mp-6",
+  "model_fit8spat_2" = "Mp-8",
+  "model_fit10spat_2" = "Mp-10"
 )
 
 year_estimate_wi<-
@@ -364,37 +283,57 @@ tbl.yrd.full %>%
   filter(.metric == "mae") %>% 
   
   full_join(
-  validation_wi_dep, by = c("modelo","year")
+    validation_wi_dep %>% 
+      mutate(
+        low_direct = hv270_recat - 1.96*se,
+        upp_direct = hv270_recat + 1.96*se
+      ),
+    
+    by = c("modelo","year")
   ) %>% 
   
-  pivot_longer(cols = c(hv270_recat,media)) %>% 
-  mutate(
-    mae2 = as.factor(ifelse(.estimate <=0.03,"< 0.3",
+  select(year,modelo,hv270_recat,low_direct,upp_direct,
+         media,li_95,ls_95,.estimate) %>% 
+    mutate(
+      mae2 = as.factor(ifelse(.estimate <=0.03,"<= 0.03",
                                   ifelse(.estimate >0.03 & 
-                                           .estimate <=0.05,"0.3-0.5",
+                                           .estimate <=0.05,"0.03-0.05",
                                          ifelse(.estimate >0.05 & 
-                                                  .estimate <=0.07,"0.5-0.7", NA)))),
+                                                  .estimate <=0.07,"0.05-0.07", NA)))),
     
-    name = ifelse(name == "hv270_recat","Direct estimate","Predicted value"),
     
-    modelo = factor(modelo, levels = c("model_pc2","model_pc2_2",
-                                       "model_pc2_4","model_pc5",
-                                       "model_pc10"))
+    modelo = factor(modelo, levels = c("model_fit2spat_1","model_fit2spat_2",
+                                       "model_fit5spat_2","model_fit8spat_2",
+                                       "model_fit10spat_2"))
   ) %>% 
+  
   ggplot()+
-  geom_point(aes(x = as.factor(year), y = value, col = name, size = mae2)) +
-  # scale_y_continuous(limits = c(0.68,.85),
-  #                    breaks = seq(0.68,.85, by = 0.02)) +
-  scale_color_lancet() +
+  
+  geom_pointrange(aes(x =hv270_recat, y = as.factor(year), 
+                      xmin = low_direct, xmax = upp_direct,
+                      color = "Direct estimate",
+                      size = mae2),
+                  alpha = .5, linewidth = 1.5) +
+  geom_pointrange(aes(x =media, y = as.factor(year),
+                      xmin = li_95, xmax = ls_95,
+                      color = "Predicted value",
+                      size = mae2),
+                  alpha = .5) +
+  
+  scale_color_manual(values = c("Direct estimate" = "red4",
+                                "Predicted value" = "blue4")) +
+  
+  scale_size_manual(
+  values = c("<= 0.03" = 0.5,
+             "0.03-0.05" = 0.8,
+             "0.05-0.07" = 1.1),
+  name = "MAE"
+) +
+  
   theme_minimal() +
   labs(color = NULL,
-       size = "MAE",
        x = "Year",
        y = "Prop.") +
-  guides(
-  color = guide_legend(order = 1),
-  size = guide_legend(order = 2)
-  ) +
   theme(
     legend.position = "bottom",
     panel.grid.minor= element_blank(),
@@ -404,154 +343,9 @@ tbl.yrd.full %>%
     axis.title = element_text(face = "bold")
     #legend.box = "vertical"
   ) +
-  facet_wrap(~modelo,scales = "free", labeller = labeller(modelo = labelsfacet2))
-
-
+  facet_wrap(~modelo, scales = "free", labeller = labeller(modelo = labelsfacet2)) +
+  coord_flip()
 ```
-
-### graph wi
-```{r}
-validation_wi_dep_graph<- # graph ----
-  validation_wi_dep %>% 
-  mutate(
-    dif = hv270_recat - media
-  ) %>% 
-  
-  filter(
-    modelo %in% c("model_pc10","model_pc8","model_pc5",
-                  "model_pc2","model_pc2_2")
-  ) %>% 
-  
-  ggplot()+
-  geom_pointrange(alpha = 0.5, aes(x = modelo, y =media,
-                      col = modelo, ymin = li_95, ymax = ls_95))+
-
-  scale_y_continuous(limits = c(0.65,.85),
-                     breaks = seq(0.65,.85, by = 0.02)) + 
-  
-  scale_color_manual(name = "model values",
-                     values = c("model_pc2" = "gray",
-                                "model_pc2_2" = "purple",
-                                "model_pc5" = "red",
-                                "model_pc8"="blue",
-                                "model_pc10" = "green",
-                                "hv270_recat" = "black")) +
-  coord_flip()+
-  
-  facet_grid(rows = vars(year), switch = "y") +
-  
-  theme_minimal() +
-  
-  theme(
-    panel.grid.major=element_blank(),
-    panel.grid.minor=element_blank(),
-    axis.text.y=element_blank(),
-    axis.line=element_line(),
-    strip.placement = "outside",
-    axis.text.x=element_text(face="bold"),
-    strip.text.y = element_text(vjust = 1,size = 10,face="bold"),
-    panel.spacing = unit(1.2, "lines"),
-    legend.position = "bottom",
-    legend.box = "vertical")
-```
-
-
-```{r, warning=F}
-validation_wi_dep_graph2<-
-  validation_wi_dep %>% 
-  
-  filter(
-    modelo %in% c("model_pc10","model_pc8","model_pc5",
-                  "model_pc2","model_pc2_2")) %>% 
-      
-  mutate(
-    difference = as.factor(ifelse(hv270_recat - media <=0.03,"< 3%",
-                                  ifelse(hv270_recat - media >0.03 & 
-                                           hv270_recat - media <=0.05,"3-5%",
-                                         ifelse(hv270_recat - media >0.05 & 
-                                                  hv270_recat - media <=0.065,"5-7%", NA))))
-  ) %>% 
-  
-  select(
-    year,hv270_recat,media,modelo,difference
-  ) %>% 
-  pivot_longer(
-    cols = hv270_recat:media
-  ) %>% 
-  mutate(
-    name = ifelse(name == "media",modelo,name)
-  ) %>% 
-  
-  ggplot(aes(x = modelo, y =value, color = name))+
-  
-  geom_point(alpha = .5, aes(size = difference))+
-  geom_line(aes(group = modelo)) +
-
-  
-  scale_y_continuous(limits = c(0.65,.85),
-                     breaks = seq(0.65,.85, by = 0.02)) +
-  
-  scale_size_manual(values = c("< 3%" = 1.5,
-                               "3-5%"= 3,
-                               "5-7%" = 5)) +
-  
-  scale_color_manual(name = "model values",
-                     values = c("model_pc2" = "gray",
-                                "model_pc2_2" = "purple",
-                                "model_pc5" = "red",
-                                "model_pc8"="blue",
-                                "model_pc10" = "green",
-                                "hv270_recat" = "black")) +
-
-  
-  coord_flip()+
-  
-  facet_grid(rows = vars(year), switch = "y") +
-  
-  theme_minimal() +
-  
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    axis.text.y = element_blank(),
-    axis.line = element_line(),
-    strip.placement = "outside",
-    axis.text.x = element_text(face = "bold"),
-    strip.text.y = element_text(vjust = 1, size = 10, face = "bold"),
-    
-    # # Color legend stays below
-    legend.position = "bottom",
-    legend.box = "vertical"
-    )
-
-  
-```
-
-
-## Complete graph
-```{r}
-library(patchwork)
-library(cowplot)
-
-validation_edu_depart_graph
-validation_edu_depart_graph2
-
-
-
-
-g2 <- validation_edu_depart_graph + theme(legend.position = "none")
-g3 <- validation_edu_depart_graph2 + theme(legend.position = "none")
-g4 <- validation_wi_dep_graph + theme(legend.position = "none")
-g5 <- validation_wi_dep_graph2 + theme(legend.position = "none")
-legend <- get_legend2(validation_wi_dep_graph2) # get_legend function is broken. Use get_legend2 from stackoverflow. view: source("./_functions/functions.R")
-
-
-plot_grid(plot_grid(g2,g3,g4,g5,nrow = 1,labels = c("A","","B","")),
-          legend, nrow = 2, rel_heights =c(0.8,0.1))
-
-#ggsave("./figures/graph1.png", dpi = 800, bg = "white", height = 10, width = 16)
-```
-
 
 ```{r}
 year_estimate_wi
@@ -563,7 +357,7 @@ legend <- get_legend2(year_estimate_wi)
 
 plot_grid(g2,g1,legend,ncol = 1, rel_heights = c(0.9,0.9,0.05), labels = c("A","B"))
 
-#ggsave("./figures/fig7.png", dpi = 800, bg = "white",width = 14, height = 9)
+ggsave("./figures/fig7.png", dpi = 800, bg = "white",width = 14, height = 9)
 ```
 
 ```{r}

@@ -34,6 +34,7 @@ edu_sae_fh2<- edu_sae %>% filter(modelo =="modelo_fh2_spatial_2")
 ```{r}
 malaria_dist_total <- read_csv("./data/aux_data/malaria_dist_total.csv") %>% 
   clean_names() %>% 
+  filter(year %in% c(2010:2020)) %>% 
   right_join(distritos) %>% 
   st_as_sf() %>% 
   mutate(
@@ -48,6 +49,30 @@ malaria_dist_specie <- read_csv("data/aux_data/malaria_dist_species.csv") %>%
     malaria_incidence = ifelse(is.na(malaria_incidence),0,malaria_incidence)
   )
 
+```
+
+# MALARIA -----
+
+```{r}
+malaria_dist_total %>% 
+  
+  ggplot() +
+  geom_sf(aes(fill = log1p(malaria_incidence))) +
+  
+  facet_wrap(~year, ncol = 4) +
+  theme_void() +
+scale_fill_gradient(low = "#deebf7", high = "#08519c", name = "log(1 + Malaria incidence per 1000 hab.)")  +
+  guides(fill = guide_colourbar(barheight = .5, 
+                                barwidth = 14,
+                                title.position = "top",
+                                direction = "horizontal")) +
+  
+  theme(
+    legend.position = c(.9,.05),
+    legend.title = element_text(face = "bold")
+  )
+
+ggsave("./figures/test2.png", dpi = 800, bg = "white", width = 10)
 ```
 
 
@@ -66,6 +91,9 @@ data2<-
   mutate(
     year = as.character(year)
   )
+
+
+
 ```
 
 
@@ -181,7 +209,7 @@ map2<-
 legend <- bi_legend(pal = "DkViolet",
                     dim = 3,
                     xlab = "malaria incidence",
-                    ylab = "% primary education",
+                    ylab = "% Elementary education",
                     size = 8)
 ```
 
@@ -202,8 +230,6 @@ ggdraw() +
 ggsave("./figures/fig9.png", dpi = 300, bg = "white", width = 9, height = 10)
 ```
 
-```{r}
 
-```
 
 

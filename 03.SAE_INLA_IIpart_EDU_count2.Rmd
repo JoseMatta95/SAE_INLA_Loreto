@@ -279,11 +279,11 @@ modelo_fh2_spatial_edu_4 <- inla(
 
 ```{r}
 model_metrics <- tibble(
-  Modelo = c("Modelo 10-1", "Modelo 8-1",
-             "Modelo 5-1", "Modelo 2-1",
-             "Modelo 2-2", "Modelo 10-2",
-             "Modelo 8-2","Modelo 5-2",
-             "Modelo 2-3","Modelo 2-4"),
+  Modelo = c("Modelo 9", "Modelo 7",
+             "Modelo 5", "Modelo 1",
+             "Modelo 2", "Modelo 10",
+             "Modelo 8","Modelo 6",
+             "Modelo 3","Modelo 4"),
   DIC     = c(modelo_fh10_spatial_edu_1$dic$dic, modelo_fh8_spatial_edu_1$dic$dic, 
               modelo_fh5_spatial_edu_1$dic$dic, modelo_fh2_spatial_edu_1$dic$dic,modelo_fh2_spatial_edu_2$dic$dic,
               modelo_fh10_spatial_edu_2$dic$dic, modelo_fh8_spatial_edu_2$dic$dic, 
@@ -466,8 +466,6 @@ distritos_sf_predict %>%
   theme_minimal()
 ```
 
-
-
 ## Performance metrics ----
 
 ```{r}
@@ -555,16 +553,16 @@ cpo.2cp.sp3 <- -2*sum(log(modelo_fh2_spatial_edu_3$cpo$cpo),na.rm = T)
 cpo.2cp.sp4 <--2*sum(log(modelo_fh2_spatial_edu_4$cpo$cpo),na.rm = T)
 
 data.cpo  <-  list(
-                   "modelo10spat" = cpo.10cp.sp,
-                   "modelo10spat2" = cpo.10cp.sp2,
-                   "modelo8spat" = cpo.8cp.sp,
-                   "modelo8spat2" = cpo.8cp.sp2,
-                   "modelo5spat" = cpo.5cp.sp,
-                   "modelo5spat2" = cpo.5cp.sp2,
-                   "modelo2spat" = cpo.2cp.sp,
-                   "modelo2spat_2" = cpo.2cp.sp2,
-                   "modelo2spat_3" = cpo.2cp.sp3,
-                   "modelo2spat_4" = cpo.2cp.sp4) %>% 
+                   "modelo9" = cpo.10cp.sp,
+                   "modelo10" = cpo.10cp.sp2,
+                   "modelo7" = cpo.8cp.sp,
+                   "modelo8" = cpo.8cp.sp2,
+                   "modelo5" = cpo.5cp.sp,
+                   "modelo6" = cpo.5cp.sp2,
+                   "modelo1" = cpo.2cp.sp,
+                   "modelo2" = cpo.2cp.sp2,
+                   "modelo3" = cpo.2cp.sp3,
+                   "modelo4" = cpo.2cp.sp4) %>% 
   as.data.frame()
 ```
 
@@ -669,7 +667,7 @@ estimate_prop_edu <-
   filter(year %in% c(2010,2013,2017,2020)) %>% 
   pivot_longer(cols = c(estimacion_real:fit2_spat_2)) %>% 
   mutate(
-    name = factor(name, levels = c("estimacion_real","fit2_spat_2"), labels = c("Direct estimate","PC 02-2"))
+    name = factor(name, levels = c("estimacion_real","fit2_spat_2"), labels = c("Direct estimate","Me-2"))
   ) %>% 
   ggplot()+
   geom_sf(aes(fill=value))+
@@ -697,7 +695,7 @@ figura2_a<-
   mutate(
     modelo = factor(modelo, 
                     levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
-                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
+                    labels = c("Me-2","Me-4","Me-6","Me-8","Me-10"))
   ) %>% 
   ggplot(aes(x = directo, y = predicho, color = modelo)) +
   geom_point(alpha = 0.5, size = 2, show.legend = F) +
@@ -787,7 +785,7 @@ metrics_edu<-
     legend_title = .metric,
     modelo = factor(modelo, 
                     levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
-                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
+                    labels = c("Me-2","Me-4","Me-6","Me-8","Me-10"))
   ) %>% 
   
   group_by(.metric) %>% 
@@ -825,7 +823,7 @@ bind_rows(tbl.yrd.full_year,tbl.yrd.full) %>%
     
     modelo = factor(modelo, 
                     levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
-                    labels = c("Model PC 2-2","Model PC 2-4","Model PC 5-2","Model PC 8-2","Model PC 10-2"))
+                    labels = c("Me-2","Me-4","Me-6","Me-8","Me-10"))
   ) %>% 
   group_by(.metric) %>% 
   nest() %>% 
@@ -859,11 +857,12 @@ figura2_b
 
 ### Figure 2
 ```{r}
-cowplot::plot_grid(figura2_a,figura2_b, 
+figure2_parte1<-
+  cowplot::plot_grid(figura2_a,figura2_b, 
                    cols = 1, 
-                   rel_heights = c(.65,.4),labels = c("A","B"))
+                   rel_heights = c(.65,.4))
 
-#ggsave("./figures/fig2.png", dpi = 800, bg = "white", width = 15, height = 10)
+ggsave("./figures/fig2.png", dpi = 800, bg = "white", width = 15, height = 10)
 ```
 
 ## MSE (bias + variance)
@@ -896,6 +895,12 @@ mse_area_long<-
   filter(
     modelo %in% c("fit2_spat_2","fit2_spat_4","fit5_spat_2",
                                         "fit8_spat_2","fit10_spat_2")
+  ) %>% 
+  mutate(
+        modelo = factor(modelo, 
+                    levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Me-2","Me-4","Me-6","Me-8","Me-10")
+        )
   )
 
 
@@ -909,10 +914,14 @@ mse_area_year<-
     .groups = "drop"
   ) %>% 
   pivot_longer(cols = c(mse,bias2, variance)) %>% 
-   mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>% 
+   mutate(name = factor(name, levels = c("mse", "bias2", "variance")),
+          
+          modelo = factor(modelo, 
+                    levels = c("fit2_spat_2","fit2_spat_4","fit5_spat_2","fit8_spat_2","fit10_spat_2"),
+                    labels = c("Me-2","Me-4","Me-6","Me-8","Me-10")
+                    ) ) %>% 
   filter(
-    modelo %in% c("fit2_spat_2","fit2_spat_4","fit5_spat_2",
-                                        "fit8_spat_2","fit10_spat_2")
+    modelo %in% c("Me-2","Me-4","Me-6","Me-8","Me-10")
   )
 
 
@@ -944,6 +953,8 @@ mse_edu<-
     strip.text = element_text(face = "bold", size = 12),
     axis.text = element_text(size = 8)
   )
+
+mse_edu
 ```
 
 
@@ -961,17 +972,16 @@ cpo.2cp.sp2 <- -2*sum(log(modelo_fh2_spatial_edu_2$cpo$cpo),na.rm = T)
 cpo.2cp.sp3 <- -2*sum(log(modelo_fh2_spatial_edu_3$cpo$cpo),na.rm = T)
 cpo.2cp.sp4 <--2*sum(log(modelo_fh2_spatial_edu_4$cpo$cpo),na.rm = T)
 
-data.cpo  <-  list(
-                   "modelo10spat" = cpo.10cp.sp,
-                   "modelo10spat2" = cpo.10cp.sp2,
-                   "modelo8spat" = cpo.8cp.sp,
-                   "modelo8spat2" = cpo.8cp.sp2,
-                   "modelo5spat" = cpo.5cp.sp,
-                   "modelo5spat2" = cpo.5cp.sp2,
-                   "modelo2spat" = cpo.2cp.sp,
-                   "modelo2spat_2" = cpo.2cp.sp2,
-                   "modelo2spat_3" = cpo.2cp.sp3,
-                   "modelo2spat_4" = cpo.2cp.sp4) %>% 
+data.cpo  <-  list("modelo9" = cpo.10cp.sp,
+                   "modelo10" = cpo.10cp.sp2,
+                   "modelo7" = cpo.8cp.sp,
+                   "modelo8" = cpo.8cp.sp2,
+                   "modelo5" = cpo.5cp.sp,
+                   "modelo6" = cpo.5cp.sp2,
+                   "modelo1" = cpo.2cp.sp,
+                   "modelo2" = cpo.2cp.sp2,
+                   "modelo3" = cpo.2cp.sp3,
+                   "modelo4" = cpo.2cp.sp4) %>% 
   as.data.frame()
 ```
 
@@ -1087,8 +1097,12 @@ graficos_prop<-
                 .f = ~.x %>% ggplot(aes(x = value, y=ubigeo, col = name))+
                   geom_point(alpha = 0.5, aes(size = pop_landscan))+
                   geom_line(aes(group = ubigeo))+
+                  scale_color_discrete(
+                    name = NULL,                # título
+                    labels = c("estimacion_real" = "Direct estimate",
+                               "value" = "Predicted value")) +
                   facet_wrap(~year, scales = "free",nrow = 2)+
-                  
+                  scale_x_continuous(limits = c(0.4, 1), breaks = seq(0.4, 1, .1))+
                   facetted_pos_scales(
                     y = list(
                       `2010` = scale_y_discrete(),
@@ -1106,13 +1120,14 @@ graficos_prop<-
                   theme_bw() +
                   theme(legend.position = "bottom",
                         axis.text.y = element_text(size = 7),
-                        panel.grid = element_blank())+
-                  ggtitle(name))
+                        panel.grid = element_blank()))
   )
 ```
 
-```{r}
+```{r, warning=F, message=F}
 graficos_prop$graph[[8]]
+
+ggsave("./figures/sm_fig6.png", dpi = 800, width = 17, height = 10)
 ```
 
 #### Calculation proportions with cases predicted
@@ -1181,12 +1196,48 @@ resultados_SAE_loreto_edu <-
 ```
 
 
-```{r}
+```{r, warning=F, message=F}
 resultados_SAE_loreto_edu %>% 
-  filter(modelo %in% c("modelo_fh8_spatial_2","modelo_fh2_spatial_2")) %>% 
-  ggplot(aes(x = edu_estimate_prop, y = ubigeo, col = modelo))+
-  geom_pointrange(aes(xmin = lower_prop, xmax = upper_prop))+
-  facet_grid(modelo~year)
+  filter(modelo %in% c("modelo_fh2_spatial_2")) %>% 
+  
+  full_join(edu_censo_final2 %>% 
+  select(year,ubigeo,hv109_recat,se) %>% 
+  mutate(
+    low_real  = hv109_recat - (1.96 * se),
+    high_real = hv109_recat + (1.96 * se)
+  )) %>% 
+  select(
+    year,ubigeo,hv109_recat,low_real,high_real,edu_estimate_prop,lower_prop,upper_prop
+  ) %>% 
+  pivot_longer(
+    cols = c(hv109_recat, edu_estimate_prop),
+    names_to = "tipo",
+    values_to = "estimate"
+  ) %>%
+  mutate(
+    lower = case_when(
+      tipo == "hv109_recat" ~ low_real,
+      tipo == "edu_estimate_prop" ~ lower_prop
+    ),
+    upper = case_when(
+      tipo == "hv109_recat" ~ high_real,
+      tipo == "edu_estimate_prop" ~ upper_prop
+    )
+  ) %>% 
+
+  ggplot(aes(x = estimate, y = ubigeo, col = tipo))+
+  geom_pointrange(aes(xmin = lower, xmax = upper), alpha = .8) +
+  scale_color_manual(
+                    name = NULL,
+                    values = c("hv109_recat" = "#75c9a6",
+                               "edu_estimate_prop" = "#11464b"),
+                    
+                    labels = c("hv109_recat" = "Direct estimate",
+                               "edu_estimate_prop" = "Predicted value")) +
+  theme_bw()+
+  facet_wrap(~year, ncol = 6)
+
+ggsave("./figures/sm_fig8.png", dpi = 800, width = 17, height = 10)
 ```
 
 
@@ -1216,7 +1267,8 @@ pop_dist %>%
 
 ## prop values
 ```{r}
-tbl.yrd.dist_prop %>% 
+errors_edu<-
+  tbl.yrd.dist_prop %>% 
   full_join(
 pop_dist %>% 
   group_by(ubigeo) %>% 
@@ -1231,8 +1283,38 @@ pop_dist %>%
   geom_point(aes(shape = modelo), alpha = .5, size = 3)+
   geom_line(aes(group = ubigeo)) +
   
+  theme_bw() +
+  
+  scale_color_discrete(
+    name = NULL,
+    labels = c(
+      "fit10_spat"   = "PC 10",
+      "fit8_spat"    = "PC 8",
+      "fit5_spat"  = "PC 5",
+      "fit2_spat_2"  = "PC 2-2",
+      "fit2_spat"    = "PC 2"
+    )
+  ) +
+  
+  scale_shape_discrete(
+    name = NULL,
+    labels = c(
+      "fit10_spat"   = "PC 10",
+      "fit8_spat"    = "PC 8",
+      "fit5_spat"  = "PC 5",
+      "fit2_spat_2"  = "PC 2-2",
+      "fit2_spat"    = "PC 2"
+    )
+  ) +
+  
   coord_flip() +
   
   facet_wrap(~.metric, scales = "free", ncol = 1)
+
+
+```
+
+```{r}
+
 ```
 

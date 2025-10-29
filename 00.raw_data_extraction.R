@@ -18,7 +18,7 @@ library(factoextra)
 source("./_functions/functions.R") # error in consulta_endes function has been fixed
 
 wi_edu_2016_2019<-
-  map_df(.x = c(2010:2019),
+  map_df(.x = c(2009:2019),
          .f = ~consulta_endes2(periodo = .x,
                                codigo_modulo = 64,
                                base = 'RECH1',
@@ -93,22 +93,23 @@ wi_edu_2016_2019<-
 # for example, housing module in 2019 was 64, but now it is 1629
 
 wi_edu_2020<-
-  consulta_endes2(periodo = 2020,
-                  codigo_modulo = 1629,
-                  base = 'RECH1',
-                  guardar = F) %>% 
-  left_join(consulta_endes2(periodo = 2020,
-                            codigo_modulo = 1630,
-                            base = 'RECH23', guardar = F) %>% 
-              mutate(
-                year = 2020
-              ), by = c("HHID")) %>% 
-  
-  left_join(consulta_endes2(periodo = 2020, 
-                            codigo_modulo = 1629, 
-                            base = 'RECH0', guardar = F ), by = "HHID")%>% 
-  select(year,everything()) %>% 
-  clean_names() %>% 
+  map_df(.x = c(2020:2021),
+         .f = ~consulta_endes2(periodo = .x,
+                               codigo_modulo = 1629,
+                               base = 'RECH1',
+                               guardar = F) %>% 
+           left_join(consulta_endes2(periodo = .x,
+                                     codigo_modulo = 1630,
+                                     base = 'RECH23', guardar = F) %>% 
+                       mutate(
+                         year = .x
+                       ), by = c("HHID")) %>% 
+           
+           left_join(consulta_endes2(periodo = .x, 
+                                     codigo_modulo = 1629, 
+                                     base = 'RECH0', guardar = F ), by = "HHID")%>% 
+           select(year,everything()) %>% 
+           clean_names() ) %>% 
   select(
     year,
     hv001, #conglomerado
@@ -181,8 +182,8 @@ wi_edu_2010_2020<-
   ) %>% 
   as_tibble()
 
-write.csv(wi_edu_2010_2020,"./data/wi_edu_2010_2020.csv", row.names = F)
-
+write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020)),"./data/wi_edu_2010_2020.csv", row.names = F)
+write.csv(wi_edu_2010_2020,"./data/aux_data/_other/wi_edu_2009_2021.csv", row.names = F)
 
 # 2. CENSOS----
 
@@ -294,7 +295,32 @@ censo_loreto_sinid<-
 pca <- prcomp(censo_loreto_sinid, center = TRUE, scale. = TRUE) 
 summary(pca) # varianza explicada
 plot(pca, type = "l", main = "Scree Plot")
-fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
+pca1<-fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
+
+
+library(ggplot2)
+
+# varianza explicada
+var_exp <- pca$sdev^2 / sum(pca$sdev^2)
+
+df_scree <- data.frame(
+  PC = factor(1:length(var_exp)),
+  VarExp = var_exp
+)
+
+pca2<-ggplot(df_scree %>% filter(PC %in% c(1:15)), aes(x = PC, y = VarExp)) +
+  geom_line(group = 1, color = "steelblue") +
+  geom_point(size = 2, color = "steelblue") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Scree Plot",
+    x = "Principal Component",
+    y = "Explained Variance (%)"
+  ) +
+  theme_bw()
+
+cowplot::plot_grid(pca1,pca2, labels = c("A","B"))
+ggsave("./figures/sm_fig3.png", dpi = 800, bg = "white", width = 18, height = 9)
 ## devolviendo id y agregando outcome
 
 censo_pca_20<-
