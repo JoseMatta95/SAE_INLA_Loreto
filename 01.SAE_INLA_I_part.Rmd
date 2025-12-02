@@ -332,7 +332,7 @@ write.csv(wi_censo_final_recat, "./data/wi_censo_final_recat.csv", row.names = F
 ```
 
 ```{r}
-year = 2010:2020
+year = c(2010:2020)
 df_final_edu <- map2_df(data_final_nest$edu_directa_recat, year, ~ mutate(.x, year = .y)) %>% 
   as_tibble() %>% 
   rename(
@@ -354,44 +354,10 @@ df_final_wi <- map2_df(data_final_nest$wi_directa_recat, year, ~ mutate(.x, year
   select(year,ubigeo,index,everything())
 
 df_final<-
-  bind_rows(df_final_edu,df_final_wi)
+  bind_rows(df_final_edu,df_final_wi) %>% 
+  filter(year %in% c(2010,2012,2014,2016,2018,2020))
 
-
-
-df_final %>% 
-  #filter(year %in%c(2016:2020)) %>% 
-  mutate(
-    lowic = estimate - (1.96*se),
-    uppwic = estimate + (1.96*se),
-  ) %>% 
-  
-  ggplot(aes(y = estimate, x = ubigeo)) +
-  geom_pointrange(aes(ymin = lowic, ymax = uppwic, col = as.factor(index)), linewidth = .5, alpha = .4) +
-  
-  scale_color_manual(values = c("edu" = "red4",
-                                "wi" = "blue4"),
-                     
-                    labels = c("edu" = "Elementary education",
-                               "wi"  = "Poverty status")) +
-  
-  labs(
-    col = NULL
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text = element_text(size = 5),
-    legend.position = c(0.82,0.1),
-      axis.ticks = element_blank(),
-      legend.background = element_blank(),
-      legend.key = element_blank(),
-      panel.border = element_blank(),
-      panel.grid.major.x  = element_blank()
-  ) +
-  facet_wrap(~year, ncol = 3) +
-
-  coord_flip()
-  
-ggsave("./figures/fig1a.png", bg = "white", dpi = 800, height = 12, width = 8)
+write.csv(df_final,"./data/aux_data/fig1_data.csv",row.names = F)
   
 ```
 

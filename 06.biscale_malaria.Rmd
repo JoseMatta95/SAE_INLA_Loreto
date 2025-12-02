@@ -4,7 +4,7 @@ output: html_document
 date: "2025-06-06"
 ---
 
-```{r}
+```{r, message=F, warning=F}
 library(tidyverse)
 library(sf)
 library(sf)
@@ -12,6 +12,10 @@ library(biscale)
 library(janitor)
 library(innovar)
 library(cowplot)
+library(ggmagnify)
+library(magick)
+
+source("./_functions/functions.R")
 ```
 
 
@@ -31,7 +35,7 @@ edu_sae_fh2<- edu_sae %>% filter(modelo =="modelo_fh2_spatial_2")
 ```
 
 
-```{r}
+```{r, warning=F, message=F}
 malaria_dist_total <- read_csv("./data/aux_data/malaria_dist_total.csv") %>% 
   clean_names() %>% 
   filter(year %in% c(2010:2020)) %>% 
@@ -54,38 +58,206 @@ malaria_dist_specie <- read_csv("data/aux_data/malaria_dist_species.csv") %>%
 # MALARIA -----
 
 ```{r}
-malaria_dist_total %>% 
+
+df_final<- read.csv("./data/aux_data/fig1_data.csv")
+
+pre_fig1<-
+  df_final %>% 
+  #filter(year %in%c(2016:2020)) %>% 
+  mutate(
+    lowic = estimate - (1.96*se),
+    uppwic = estimate + (1.96*se),
+    ubigeo = as.character(ubigeo)
+  ) %>% 
   
+  ggplot(aes(y = estimate, x = ubigeo)) +
+  geom_pointrange(aes(ymin = lowic, ymax = uppwic, col = as.factor(index)), 
+                  linewidth = .5, alpha = .4) +
+  
+  scale_color_manual(values = c("edu" = "red4",
+                                "wi" = "blue4"),
+                     
+                     labels = c("edu" = "Elementary education",
+                                "wi"  = "Poverty status")) +
+  
+  labs(
+    col = NULL,
+    x = "Ubigeo",
+    y = "Direct estimates"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 8),
+    axis.title = element_text(face = "bold"),
+    #legend.position = c(0.82,0.1),
+    legend.position = "bottom",
+    axis.ticks = element_blank(),
+    legend.background = element_blank(),
+    legend.key = element_blank(),
+    panel.border = element_blank(),
+    panel.grid.major.x  = element_blank()
+  ) +
+  facet_wrap(~year, ncol = 6) +
+  
+  coord_flip()
+```
+
+
+```{r}
+loreto_malaria_area<-
+  malaria_dist_total %>% 
+  group_by(year,prov) %>% 
+  summarise(meanincidence = mean(malaria_incidence)) %>% 
+  ungroup() %>% 
+  st_drop_geometry() %>% 
+  
+  ggplot(aes(x = year, y = meanincidence, fill = prov)) +
+  
+  geom_area(alpha=0.5 , size=.5) +
+  ggsci::scale_fill_nejm() +
+  
+  labs(fill = "Provinces\n(admin level-2)",
+       y = "malaria incidence x 1000 inhab.",
+       x = "year") +
+  
+  scale_x_continuous(limits = c(2010,2020), breaks = seq(2010,2020,2)) +
+  
+  theme_minimal() +
+  
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 7),
+    axis.title = element_text(face = "bold"),
+    panel.grid.major  = element_blank()
+  )
+
+legend_prov <- gtable::gtable_add_padding(
+  get_legend2(loreto_malaria_area),
+  padding = unit(c(1, 0, 0, 1), "cm")  # top, right, bottom, left
+)
+
+loreto_malaria_area_nolegend<-loreto_malaria_area + theme(legend.position = "none")
+```
+
+```{r}
+peru_prov<-
+malaria_dist_total %>%
+  filter(year == 2010) %>% 
   ggplot() +
-  geom_sf(aes(fill = log1p(malaria_incidence))) +
+  geom_sf(aes(fill = prov),alpha = .5) +
+  ggsci::scale_fill_nejm() +
+  guides(fill = "none") +
+  theme_void() 
+
+
+peru_dist <- Peru
+peru_mini <- 
+peru_dist %>%
+  mutate(
+    loreto_col = ifelse(dep.code == "16","1","0")
+  ) %>% 
+  ggplot() +
   
-  facet_wrap(~year, ncol = 4) +
+  geom_sf(data = peru_dist %>%
+            st_union() %>%
+            st_as_sf(), 
+          
+          fill = NA, 
+          color = "black", 
+          size = 1) +
+  
+  geom_sf(aes(fill = loreto_col, col = loreto_col)) +
+
+  scale_color_manual(values = c("1" = "grey50",
+                                "0" = "grey90")) +
+  scale_fill_manual(values = c("1" = "grey50",
+                                "0" = "grey90")) +
+  guides(fill = "none", col = "none") +
+  theme_void()
+
+######
+logo <- image_read("./flecha-curva.png")
+
+peru_loreto<-
+ggdraw() +
+  draw_plot(peru_prov) +
+  draw_plot(peru_mini, 
+            x = 0.08, y = 0.15, 
+            width = 0.20, height = 0.30) +
+  draw_image(logo, 
+             x = 0.18, y = 0.45, 
+             width = 0.1, height = 0.1)
+```
+
+```{r}
+malaria_prov_map<-
+  plot_grid(
+plot_grid(peru_loreto,loreto_malaria_area_nolegend,
+          rel_widths = c(1.1,.9)),
+
+legend_prov, nrow = 2, rel_heights = c(1,.1))
+```
+
+```{r}
+malaria_maps<-
+  malaria_dist_total %>% 
+  filter(year%in%c(2010,2012,2014,2016,2018,2020)) %>% 
+  ggplot() +
+  geom_sf(aes(fill = log10(malaria_incidence))) +
+  
+  facet_wrap(~year, nrow = 1) +
   theme_void() +
-scale_fill_gradient(low = "#deebf7", high = "#08519c", name = "log(1 + Malaria incidence per 1000 hab.)")  +
+scale_fill_gradientn(
+    colours = rev(RColorBrewer::brewer.pal(11, "RdBu")), # rojo alto, azul bajo
+    #limits = c(-1.5, 4),        # según tus valores
+    #values = scales::rescale(c(-1.5, 0, 4)), # 0 al centro
+    oob = scales::squish,
+    na.value = "gray80",
+    name = "log10(Malaria incidence x 1000 inhab.)"
+  ) +
   guides(fill = guide_colourbar(barheight = .5, 
                                 barwidth = 14,
                                 title.position = "top",
                                 direction = "horizontal")) +
   
   theme(
-    legend.position = c(.9,.05),
-    legend.title = element_text(face = "bold")
+    #legend.position = c(.45,.15),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    plot.margin = unit(c(1, 0, 0, 0), "cm")
   )
 
-ggsave("./figures/test2.png", dpi = 800, bg = "white", width = 10)
+#ggsave("./figures/test2.png", dpi = 800, bg = "white", width = 10)
 ```
 
+```{r}
+plot_grid(pre_fig1,
+          
+          malaria_prov_map,
+          
+          ggplot() + theme_void() ,
+          
+          malaria_maps,
+          
+          
+          ncol = 1, rel_heights = c(1,.5,.1,.5), labels = c("A","B","","C"))
+```
+
+```{r}
+ggsave("./figures/fig1.png", dpi = 800, bg = "white", height = 11, width = 9)
+```
 
 # INDICE RIQUEZA -----
 ```{r}
-data<-
+data_wi<-
    malaria_dist_total %>% 
-  full_join(wi_sae_fh2, by = c('year','ubigeo')) %>% 
+  full_join(wi_sae_fh2, by = c('year','ubigeo','pop_landscan')) %>% 
   mutate(
     year = as.character(year)
   )
 
-data2<-
+data_wi2<-
    malaria_dist_specie %>% 
   full_join(wi_sae_fh2, by = c('year','ubigeo')) %>% 
   mutate(
@@ -98,19 +270,25 @@ data2<-
 
 
 ```{r}
-data_bi <- bi_class(data, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi <- bi_class(data_wi, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 
-data_bi2 <- bi_class(data2, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi2 <- bi_class(data_wi2, y = wi_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 ```
 
 
 ```{r}
 map <- 
   ggplot() +
-  geom_sf(data = data_bi, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  geom_sf(data = data_bi %>% 
+            filter(year %in% c(2010,2012,2014,2016,2018,2020)),
+          mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
   bi_scale_fill(pal = "DkViolet", dim = 3) +
  theme_void() +
-  facet_wrap(~year, ncol = 3)
+  facet_wrap(~year, nrow = 1) +
+  
+  theme(
+    strip.text = element_text(face = "bold")
+  )
 ```
 
 
@@ -130,33 +308,163 @@ map2<-
 legend <- bi_legend(pal = "DkViolet",
                     dim = 3,
                     xlab = "malaria incidence",
-                    ylab = "% poverty",
-                    size = 8)
+                    ylab = "% Poverty",
+                    size = 7)
 ```
 
 
 ```{r}
-ggdraw() +
+bimap_wi<-
+  ggdraw() +
   draw_plot(map, 0, 0, 1, 1) +
-  draw_plot(legend, 0.65, .08, 0.2, 0.2)
+  draw_plot(legend, 0.42, .7, 0.20, 0.3) 
 ```
 
 
 ```{r}
-ggdraw() +
+bimap_wi_species<-
+  ggdraw() +
   draw_plot(map2, 0, 0, 1, 1) +
   draw_plot(legend, 0.65, .08, 0.13, 0.15)
 ```
 
 
 ```{r}
-ggsave("./figures/fig8.png", dpi = 300, bg = "white", width = 9, height = 10)
+#ggsave("./figures/fig8.png", dpi = 300, bg = "white", width = 9, height = 10)
 
+```
+
+## Moran bivariate
+
+```{r}
+library(spdep)
+library(sfdep)
+
+moran_test <-
+  data_wi %>% 
+  group_by(year) %>% 
+  nest() %>% 
+  mutate(
+    nb = map(.x = data,
+             .f = ~poly2nb(.x, queen = T)),
+    
+    lw = map(.x = nb,
+             .f = ~nb2listw(.x, style = "W", zero.policy = T)),
+    
+    wt = map(.x = lw, .f = ~.x$weights),
+    
+    moranbi = map2(.x = data, .y = lw,
+                   .f = ~moran_bv(x = .x$malaria_incidence, 
+                                  y = .x$wi_estimate_prop, listw = .y, nsim = 999, scale = T)),
+    
+    morant = map2(.x = data, .y = lw,
+                  .f = ~moran.test(x = .x$malaria_incidence, .y, alternative = "greater")),
+    
+    localmoran = map2(.x = data, .y = lw,
+                      .f = ~localmoran(x = .x$malaria_incidence, .y, alternative = "greater")),
+    
+    # Use pmap to pass multiple arguments (data, nb, and lw)
+    localmoran_bi = pmap(list(data, nb, wt),
+                         ~ local_moran_bv(x = ..1$malaria_incidence, 
+                                          y = ..1$wi_estimate_prop, 
+                                          nb = ..2, 
+                                          wt = ..3, nsim = 999)),
+    
+    
+    
+    lisa_classified = pmap(list(data, localmoran_bi, lw),
+                          function(df, lisa, listw) {
+                            # Estandarizar la variable X (malaria)
+                            z_malaria <- scale(df$malaria_incidence)[,1]
+                            
+                            # Calcular el lag espacial de Y (edu) manualmente
+                            lag_edu <- lag.listw(listw, df$wi_estimate_prop)
+                            
+                            # Estandarizar el lag
+                            z_lag_edu <- scale(lag_edu)[,1]
+                            
+                            # Crear el dataframe con clasificación
+                            df %>%
+                              mutate(
+                                Ib = lisa$Ib,
+                                p_sim = lisa$p_sim,
+                                z_malaria = z_malaria,
+                                z_lag_edu = z_lag_edu,
+                                
+                                # Clasificar en cuadrantes
+                                quadrant = case_when(
+                                  z_malaria >= 0 & z_lag_edu >= 0 ~ "High-High",
+                                  z_malaria < 0 & z_lag_edu < 0 ~ "Low-Low",
+                                  z_malaria >= 0 & z_lag_edu < 0 ~ "High-Low",
+                                  z_malaria < 0 & z_lag_edu >= 0 ~ "Low-High"
+                                ),
+                                
+                                # Solo significativos
+                                quadrant_sig = if_else(p_sim < 0.05, 
+                                                       quadrant, 
+                                                       "Not significant")
+                              )
+                          })
+  )
+
+
+moran_test$moranbi
+```
+
+
+```{r}
+lisa_wi<-
+  moran_test %>% 
+  select(year,data,localmoran_bi,lisa_classified) %>% 
+  unnest() %>% 
+  ungroup() %>% 
+  st_as_sf() %>% 
+  select(year,ubigeo,malaria_incidence,wi_estimate_prop,Ib,p_sim,quadrant) %>% 
+  filter(year %in% c(2010,2012,2014,2016,2018,2020)) %>% 
+  mutate(
+    sig = ifelse(p_sim<=0.05,'si','no')
+  ) %>% 
+  
+  ggplot() +
+  geom_sf(aes(fill = quadrant, alpha = sig), col = "grey") +
+  
+  scale_alpha_manual(guide = "none", values = c('si' = 1,
+                                                'no' = .2)) +
+  
+  scale_fill_manual(values = c("Low-Low" = "#1F78B4",
+                               "High-Low"="#FDBF6F",
+                               "High-High"="#E31A1C",
+                               "Low-High"="#A6CEE3",
+                               "Not significant" = "grey50"
+                               
+                               ), name = "LISA clusters"
+                    ) +
+
+  theme_void() +
+  
+  facet_wrap(~year, nrow = 1) +
+  
+  theme(
+    strip.text = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    plot.margin = unit(c(0, 0, 0, 0), "cm")
+  )
+
+```
+```{r}
+plot_grid(
+  
+  plot_grid(legend,map, nrow = 2, rel_heights = c(.6,1)),
+  
+  lisa_wi, nrow = 2, labels = c("A","B"))
+
+ggsave("./figures/fig7.png", dpi = 800, bg = "white", width = 12)
 ```
 
 # EDUCACION -----
 ```{r}
-data<-
+data_edu<-
    malaria_dist_total %>% 
   full_join(edu_sae_fh2, by = c('year','ubigeo')) %>% 
   mutate(
@@ -164,7 +472,7 @@ data<-
   )
 
 
-data2<-
+data_edu2<-
    malaria_dist_specie %>% 
   full_join(edu_sae_fh2, by = c('year','ubigeo')) %>% 
   mutate(
@@ -174,22 +482,30 @@ data2<-
 
 
 ```{r}
-data_bi <- bi_class(data, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi <- bi_class(data_edu, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 
-data_bi2 <- bi_class(data2, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
+data_bi2 <- bi_class(data_edu2, y = edu_estimate_prop, x = malaria_incidence, dim = 3, style = "quantile")
 ```
 
 
 ```{r}
 map <- 
   ggplot() +
-  geom_sf(data = data_bi, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
+  geom_sf(data = data_bi %>% 
+            filter(year %in% c(2010,2012,2014,2016,2018,2020)),
+          mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
   bi_scale_fill(pal = "DkViolet", dim = 3) +
   labs(
     #title = "Malaria incidence distribution across education level"
   ) +
  theme_void() +
-  facet_wrap(~year, ncol = 3)
+  facet_wrap(~year, nrow = 1) +
+  
+  theme(
+    strip.text = element_text(face = "bold")
+  )
+
+
 ```
 
 
@@ -197,7 +513,7 @@ map <-
 map2<-
   ggplot() +
   geom_sf(data = data_bi2 %>% 
-            filter(year %in% c(2010,2013,2017,2020)),
+            filter(year %in% c(2010,2012,2014,2016,2018,2020)),
           mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
   bi_scale_fill(pal = "DkViolet", dim = 3) +
   theme_void() +
@@ -209,15 +525,16 @@ map2<-
 legend <- bi_legend(pal = "DkViolet",
                     dim = 3,
                     xlab = "malaria incidence",
-                    ylab = "% Elementary education",
-                    size = 8)
+                    ylab = "% Element. education",
+                    size = 7)
 ```
 
 
 ```{r}
-ggdraw() +
+bimap_edu<-
+  ggdraw() +
   draw_plot(map, 0, 0, 1, 1) +
-  draw_plot(legend, 0.65, .08, 0.2, 0.2)
+  draw_plot(legend, 0.42, .7, 0.20, 0.3) 
 ```
 
 ```{r}
@@ -227,9 +544,136 @@ ggdraw() +
 ```
 
 ```{r}
-ggsave("./figures/fig9.png", dpi = 300, bg = "white", width = 9, height = 10)
+#ggsave("./figures/fig9.png", dpi = 300, bg = "white", width = 9, height = 10)
+```
+
+## Moran bivariate
+
+```{r}
+library(spdep)
+library(sfdep)
+
+moran_test_edu <-
+  data_edu %>% 
+  group_by(year) %>% 
+  nest() %>% 
+  mutate(
+    nb = map(.x = data,
+             .f = ~poly2nb(.x, queen = T)),
+    
+    lw = map(.x = nb,
+             .f = ~nb2listw(.x, style = "W", zero.policy = T)),
+    
+    wt = map(.x = lw, .f = ~.x$weights),
+    
+    moranbi = map2(.x = data, .y = lw,
+                   .f = ~moran_bv(x = .x$malaria_incidence, 
+                                  y = .x$edu_estimate_prop, listw = .y, nsim = 999, scale = T)),
+    
+    morant = map2(.x = data, .y = lw,
+                  .f = ~moran.test(x = .x$malaria_incidence, .y, alternative = "greater")),
+    
+    localmoran = map2(.x = data, .y = lw,
+                      .f = ~localmoran(x = .x$malaria_incidence, .y, alternative = "greater")),
+    
+    # Use pmap to pass multiple arguments (data, nb, and lw)
+    localmoran_bi = pmap(list(data, nb, wt),
+                         ~ local_moran_bv(x = ..1$malaria_incidence, 
+                                          y = ..1$edu_estimate_prop, 
+                                          nb = ..2, 
+                                          wt = ..3, nsim = 999)),
+    
+    
+    
+    lisa_classified = pmap(list(data, localmoran_bi, lw),
+                          function(df, lisa, listw) {
+                            # Estandarizar la variable X (malaria)
+                            z_malaria <- scale(df$malaria_incidence)[,1]
+                            
+                            # Calcular el lag espacial de Y (edu) manualmente
+                            lag_edu <- lag.listw(listw, df$edu_estimate_prop)
+                            
+                            # Estandarizar el lag
+                            z_lag_edu <- scale(lag_edu)[,1]
+                            
+                            # Crear el dataframe con clasificación
+                            df %>%
+                              mutate(
+                                Ib = lisa$Ib,
+                                p_sim = lisa$p_sim,
+                                z_malaria = z_malaria,
+                                z_lag_edu = z_lag_edu,
+                                
+                                # Clasificar en cuadrantes
+                                quadrant = case_when(
+                                  z_malaria >= 0 & z_lag_edu >= 0 ~ "High-High",
+                                  z_malaria < 0 & z_lag_edu < 0 ~ "Low-Low",
+                                  z_malaria >= 0 & z_lag_edu < 0 ~ "High-Low",
+                                  z_malaria < 0 & z_lag_edu >= 0 ~ "Low-High"
+                                ),
+                                
+                                # Solo significativos
+                                quadrant_sig = if_else(p_sim < 0.05, 
+                                                       quadrant, 
+                                                       "Not significant")
+                              )
+                          })
+  )
 ```
 
 
+```{r}
+lisa_edu<-
+  moran_test_edu %>% 
+  select(year,data,localmoran_bi,lisa_classified) %>% 
+  unnest() %>% 
+  ungroup() %>% 
+  st_as_sf() %>% 
+  select(year,ubigeo,malaria_incidence,edu_estimate_prop,Ib,p_sim,quadrant) %>% 
+  filter(year %in% c(2010,2012,2014,2016,2018,2020)) %>% 
+  mutate(
+    sig = ifelse(p_sim<=0.05,'si','no')
+  ) %>% 
+  
+  ggplot() +
+  geom_sf(aes(fill = quadrant, alpha = sig),col = "grey") +
+  
+  scale_alpha_manual(guide = "none", values = c('si' = 1,
+                                                'no' = .2)) +
+  
+  scale_fill_manual(values = c("Low-Low" = "#1F78B4",
+                               "High-Low"="#FDBF6F",
+                               "High-High"="#E31A1C",
+                               "Low-High"="#A6CEE3",
+                               "Not significant" = "grey50"
+                               
+                               ), name = "LISA clusters"
+                    ) +
 
+  theme_void() +
+  
+  facet_wrap(~year, nrow = 1) +
+  
+  theme(
+    strip.text = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold")
+  )
+
+
+```
+
+```{r}
+plot_grid(
+  
+  plot_grid(legend,map, nrow = 2, rel_heights = c(.6,1)),
+  
+  lisa_edu, nrow = 2, labels = c("A","B"))
+
+ggsave("./figures/fig6.png", dpi = 800, bg = "white", width = 12)
+```
+
+```{r}
+
+```
 
