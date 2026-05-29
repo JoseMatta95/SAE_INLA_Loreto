@@ -4,7 +4,7 @@
 
 This study applies small area estimation (SAE) to produce district-level estimates of education level and wealth index for the 53 districts of Loreto, Peru, over the period 2010–2020. Direct estimates from the Demographic and Health Survey (ENDES) are unreliable at the district level due to small sample sizes, particularly in remote Amazonian areas. We use INLA-based Bayesian models with spatial (SPDE, BYM2) and temporal (RW2) components fitted at the primary sampling unit (PSU) level, incorporating 2017 Census covariates via principal component analysis. Model selection is based on CPO and predictive accuracy against design-based direct estimates. Final district-year predictions are used to characterize socioeconomic inequalities and their association with malaria incidence.
 
-![](https://github.com/josematta/SAE_INLA_Loreto/blob/main/figures/main%20figures/fig1.pdf)
+![](https://github.com/JoseMatta95/SAE_INLA_Loreto/blob/main/figures/main%20figures/fig1.png)
 
 > **Fig 1.** Study area. (a) PSU locations by period. (b) Loreto provinces and malaria incidence trends 2010–2020. (c) Spatial distribution of malaria incidence across districts by year.
 
