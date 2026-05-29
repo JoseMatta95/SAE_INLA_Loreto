@@ -1,0 +1,542 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-05-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+
+```{r}
+library(tidyverse)
+library(survey)
+library(janitor)
+library(sf)
+library(innovar)
+library(fastDummies)
+library(ggcorrplot)
+library(corrplot)
+library(factoextra)
+library(spdep)
+library(INLA)
+library(car)
+library(data.table)
+```
+
+This R script has two parts:
+I. Obtain direct estimations for wealth index and education level — including their recategorized versions (edu: at least completed primary education; wi: at least in the 3rd wi level).
+II. Merge the direct estimations with the PCA dataset and the full census dataset (2010–2020). The resulting datasets are saved to be used in 02_SAE_INLA_II_part.R.
+
+# Dataset from Loreto districts
+```{r}
+data("Peru")
+distritos<- Peru %>% mutate(ubigeo = as.character(ubigeo)) %>% 
+  filter(dep == "LORETO")
+```
+
+# 1. data ENDES from 2010-2020
+```{r}
+wi_edu_2010_2020 <-read.csv("./data/wi_edu_2010_2020.csv") %>% mutate(ubigeo = as.character(ubigeo))
+```
+
+# 2. data censo 
+```{r}
+## total census data from 2017 (Loreto districts)
+censo_final_loreto <- read.csv("./data/censo_2017/01.censo_final_loreto_2017.csv") %>% mutate(ubigeo = as.character(ubigeo))
+```
+
+```{r}
+## Data obtained through PCA
+censo_pca_20 <- read.csv("./data/censo_2017/censo_2017_pca_20.csv") %>% mutate(ubigeo = as.character(ubigeo))
+```
+
+# 3. Direct estimations with ENDES
+
+```{r}
+data_final_nest<-
+  wi_edu_2010_2020 %>% 
+  mutate(
+    hv005= hv005 / 1000000,
+    
+    wealth_tercile = cut(hv271,
+                breaks = quantile(hv271, probs = seq(0, 1, 1/3), na.rm = TRUE),
+                include.lowest = TRUE,
+                labels = c("Bajo","Medio","Alto")),
+    
+    wealth_tercile = factor(
+  ifelse(is.na(wealth_tercile), "Bajo", as.character(wealth_tercile)),
+  levels = c("Bajo","Medio","Alto")
+)
+  ) %>% 
+  group_by(year) %>% 
+  nest() %>% 
+  mutate(
+    svydesign_endes= map(.x=data,
+                         .f = ~svydesign(ids = ~hv001, strata = ~hv022, 
+                                         weights = ~hv005, data = .x, nest = T)),
+    
+    wi_directa = map(.x = svydesign_endes,
+                     .f = ~svyby(~hv270, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    edu_directa = map(.x = svydesign_endes,
+                      .f = ~svyby(~hv109, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    
+    
+    wi_directa_recat = map(.x = svydesign_endes,
+                           .f = ~svyby(~hv270_recat, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    
+    wi_directa_recat_ter = map(.x = svydesign_endes,
+                           .f = ~svyby(~wealth_tercile, ~ubigeo, design = .x, svymean, keep.var = T)),
+    
+    
+    edu_directa_recat = map(.x = svydesign_endes,
+                            .f = ~svyby(~hv109_recat, ~ubigeo, design = .x, svymean, keep.var = T))
+  )
+
+```
+
+# 4. Merging PCA and full census datasets with direct estimations
+Since the datasets may contain values of 0 and 1, and we will transform proportions to the logit form,
+we applied a correction: if the direct estimation is equal to 0, we add a small epsilon value. If the proportion is equal to 1, 
+we subtract an epsilon value.
+```{r}
+epsilon <- 0.01
+
+
+direct_estimation_censo_total <- 
+  data_final_nest %>%
+  select(year,edu_directa,wi_directa,edu_directa_recat,wi_directa_recat,wi_directa_recat_ter) %>% 
+  mutate(
+    
+    edu_censo_cpa = map(.x = edu_directa,
+                    .f = ~distritos %>% 
+                      full_join(
+                        censo_pca_20 %>% 
+                          left_join(.x) %>% 
+                          
+                          mutate(
+                            # MODIFICADO: Corrección epsilon con tolerancia numérica
+                            across(.cols = hv109NE:hv109SuE, 
+                                   .f = ~case_when(
+                                     .x <= epsilon ~ epsilon,
+                                     .x >= (1 - epsilon) ~ 1 - epsilon,
+                                     TRUE ~ .x
+                                   ), 
+                                   .names = '{.col}_cor'),
+                            
+                            # MODIFICADO: Logit manual sin función logit()
+                            across(.cols = hv109NE_cor:hv109SuE_cor, 
+                                   .f = ~log(.x / (1 - .x)), 
+                                   .names = '{.col}_logit'),
+                            
+                            # Varianza en escala logit
+                            var_logit_hv109NE = (se.hv109NE^2)/(hv109NE_cor^2 * (1-hv109NE_cor)^2),
+                            var_logit_hv109PE = (se.hv109PE^2)/(hv109PE_cor^2 * (1-hv109PE_cor)^2),
+                            var_logit_hv109SE = (se.hv109SE^2)/(hv109SE_cor^2 * (1-hv109SE_cor)^2),
+                            var_logit_hv109SuE = (se.hv109SuE^2)/(hv109SuE_cor^2 * (1-hv109SuE_cor)^2),
+                            
+                            # SE en escala logit (mantener nombres originales)
+                            se_hv109NE_cor = var_logit_hv109NE,
+                            se_hv109PE_cor = var_logit_hv109PE,
+                            se_hv109SE_cor = var_logit_hv109SE,
+                            se_hv109SuE_cor = var_logit_hv109SuE
+                          ) %>% 
+                          
+                          mutate(
+                            # Floor para varianzas muy pequeñas
+                            across(c(var_logit_hv109NE:var_logit_hv109SuE, se_hv109NE_cor:se_hv109SuE_cor), 
+                                   .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                            
+                            # Precisión (inversa de varianza)
+                            prec_logit_hv109NE = 1 / var_logit_hv109NE,
+                            prec_logit_hv109PE = 1 / var_logit_hv109PE,
+                            prec_logit_hv109SE = 1 / var_logit_hv109SE,
+                            prec_logit_hv109SuE = 1 / var_logit_hv109SuE
+                          )
+                      
+                      ) %>% 
+                      group_by(ubigeo) %>% 
+                      mutate(
+                        id.sp = cur_group_id()
+                      ) %>% 
+                      ungroup()),
+    
+    
+    
+    
+    wi_censo_cpa= map(.x = wi_directa,
+                   .f = ~distritos %>% 
+                     full_join(
+                       censo_pca_20 %>% 
+                         left_join(.x) %>% 
+                         
+                         mutate(
+                           # MODIFICADO: Corrección epsilon con tolerancia numérica
+                           across(.cols = hv2701st:hv2705th, 
+                                  .f = ~case_when(
+                                    .x <= epsilon ~ epsilon,
+                                    .x >= (1 - epsilon) ~ 1 - epsilon,
+                                    TRUE ~ .x
+                                  ), 
+                                  .names = '{.col}_cor'),
+                           
+                           # MODIFICADO: Logit manual sin función logit()
+                           across(.cols = hv2701st_cor:hv2705th_cor, 
+                                  .f = ~log(.x / (1 - .x)), 
+                                  .names = '{.col}_logit'),
+                           
+                           # Varianza en escala logit
+                           var_logit_hv2701st = (se.hv2701st^2)/(hv2701st_cor^2 * (1-hv2701st_cor)^2),
+                           var_logit_hv2702nd = (se.hv2702nd^2)/(hv2702nd_cor^2 * (1-hv2702nd_cor)^2),
+                           var_logit_hv2703rd = (se.hv2703rd^2)/(hv2703rd_cor^2 * (1-hv2703rd_cor)^2),
+                           var_logit_hv2704th = (se.hv2704th^2)/(hv2704th_cor^2 * (1-hv2704th_cor)^2),
+                           var_logit_hv2705th = (se.hv2705th^2)/(hv2705th_cor^2 * (1-hv2705th_cor)^2),
+                           
+                           # SE en escala logit (mantener nombres originales)
+                           se_hv2701st_cor = var_logit_hv2701st,
+                           se_hv2702nd_cor = var_logit_hv2702nd,
+                           se_hv2703rd_cor = var_logit_hv2703rd,
+                           se_hv2704th_cor = var_logit_hv2704th,
+                           se_hv2705th_cor = var_logit_hv2705th
+                         ) %>% 
+                         
+                         mutate(
+                           # Floor para varianzas muy pequeñas
+                           across(c(var_logit_hv2701st:var_logit_hv2705th, se_hv2701st_cor:se_hv2705th_cor), 
+                                  .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                           
+                           # Precisión (inversa de varianza)
+                           prec_logit_hv2701st = 1 / var_logit_hv2701st,
+                           prec_logit_hv2702nd = 1 / var_logit_hv2702nd,
+                           prec_logit_hv2703rd = 1 / var_logit_hv2703rd,
+                           prec_logit_hv2704th = 1 / var_logit_hv2704th,
+                           prec_logit_hv2705th = 1 / var_logit_hv2705th
+                         )
+                       
+                     ) %>% 
+                     group_by(ubigeo) %>% 
+                     mutate(
+                       id.sp = cur_group_id()
+                     ) %>% 
+                     ungroup()),
+    
+    
+    edu_censo_cpa_recat = map(.x = edu_directa_recat,
+                        .f = ~distritos %>% 
+                          full_join(
+                            censo_pca_20 %>% 
+                              left_join(.x) %>% 
+                              
+                              mutate(
+                                # MODIFICADO: Corrección epsilon con tolerancia numérica
+                                across(.cols = hv109_recat, 
+                                       .f = ~case_when(
+                                         .x <= epsilon ~ epsilon,
+                                         .x >= (1 - epsilon) ~ 1 - epsilon,
+                                         TRUE ~ .x
+                                       ), 
+                                       .names = '{.col}_cor'),
+                                
+                                # MODIFICADO: Logit manual sin función logit()
+                                across(.cols = hv109_recat_cor, 
+                                       .f = ~log(.x / (1 - .x)), 
+                                       .names = '{.col}_logit'),
+                                
+                                # Varianza en escala logit
+                                var_logit_hv109_recat = (se^2)/(hv109_recat_cor^2 * (1-hv109_recat_cor)^2),
+                                
+                                # SE en escala logit (mantener nombre original)
+                                se_hv109_recat_cor = se
+                              ) %>% 
+                              
+                              mutate(
+                                # Floor para varianzas muy pequeñas
+                                across(c(var_logit_hv109_recat, se_hv109_recat_cor), 
+                                       .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                                
+                                # Precisión (inversa de varianza)
+                                prec_logit_hv109_recat = 1 / var_logit_hv109_recat
+                              )
+                            
+                          ) %>% 
+                          group_by(ubigeo) %>% 
+                          mutate(
+                            id.sp = cur_group_id()
+                          ) %>% 
+                          ungroup()),
+    
+    
+    wi_censo_cpa_recat= map(.x = wi_directa_recat,
+                      .f = ~distritos %>% 
+                        full_join(
+                          censo_pca_20 %>% 
+                            left_join(.x) %>% 
+                            
+                            mutate(
+                              # MODIFICADO: Corrección epsilon con tolerancia numérica
+                              across(.cols = hv270_recat, 
+                                     .f = ~case_when(
+                                       .x <= epsilon ~ epsilon,
+                                       .x >= (1 - epsilon) ~ 1 - epsilon,
+                                       TRUE ~ .x
+                                     ), 
+                                     .names = '{.col}_cor'),
+                              
+                              # MODIFICADO: Logit manual sin función logit()
+                              across(.cols = hv270_recat_cor, 
+                                     .f = ~log(.x / (1 - .x)), 
+                                     .names = '{.col}_logit'),
+                              
+                              # Varianza en escala logit
+                              var_logit_hv270_recat = (se^2)/(hv270_recat_cor^2 * (1-hv270_recat_cor)^2),
+                              
+                              # SE en escala logit (mantener nombre original)
+                              se_hv270_recat_cor = se
+                            ) %>% 
+                            
+                            mutate(
+                              # Floor para varianzas muy pequeñas
+                              across(c(var_logit_hv270_recat, se_hv270_recat_cor), 
+                                     .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                              
+                              # Precisión (inversa de varianza)
+                              prec_logit_hv270_recat = 1 / var_logit_hv270_recat
+                            )
+                          
+                        ) %>% 
+                        group_by(ubigeo) %>% 
+                        mutate(
+                          id.sp = cur_group_id()
+                        ) %>% 
+                        ungroup()),
+    
+    
+    
+    wi_censo_cpa_recat_ter= map(.x = wi_directa_recat_ter ,
+                      .f = ~distritos %>% 
+                        full_join(
+                          censo_pca_20 %>% 
+                            left_join(.x) %>% 
+                            
+                            mutate(
+                              # MODIFICADO: Corrección epsilon con tolerancia numérica
+                              across(.cols = wealth_tercileBajo, 
+                                     .f = ~case_when(
+                                       .x <= epsilon ~ epsilon,
+                                       .x >= (1 - epsilon) ~ 1 - epsilon,
+                                       TRUE ~ .x
+                                     ), 
+                                     .names = '{.col}_cor'),
+                              
+                              # MODIFICADO: Logit manual sin función logit()
+                              across(.cols = wealth_tercileBajo_cor, 
+                                     .f = ~log(.x / (1 - .x)), 
+                                     .names = '{.col}_logit'),
+                              
+                              # Varianza en escala logit
+                              var_wealth_tercileBajo_logit = (se.wealth_tercileBajo^2)/(wealth_tercileBajo_cor^2 * (1-wealth_tercileBajo_cor)^2),
+                              
+                              # SE en escala logit (mantener nombre original)
+                              se_wealth_tercileBajo_logit = sqrt(var_wealth_tercileBajo_logit)
+                            ) 
+                          
+                        ) %>% 
+                        group_by(ubigeo) %>% 
+                        mutate(
+                          id.sp = cur_group_id()
+                        ) %>% 
+                        ungroup()),
+    
+    
+    
+    
+    edu_censo_total = map(.x = edu_directa,
+                          .f = ~distritos %>% 
+                            full_join(
+                              censo_final_loreto %>%
+                                left_join(.x) %>% 
+                                
+                                mutate(
+                                  # MODIFICADO: Corrección epsilon con tolerancia numérica
+                                  across(.cols = hv109NE:hv109SuE, 
+                                         .f = ~case_when(
+                                           .x <= epsilon ~ epsilon,
+                                           .x >= (1 - epsilon) ~ 1 - epsilon,
+                                           TRUE ~ .x
+                                         ), 
+                                         .names = '{.col}_cor'),
+                                  
+                                  # MODIFICADO: Logit manual sin función logit()
+                                  across(.cols = hv109NE_cor:hv109SuE_cor, 
+                                         .f = ~log(.x / (1 - .x)), 
+                                         .names = '{.col}_logit'),
+                                  
+                                  # Varianza en escala logit
+                                  var_logit_hv109NE = (se.hv109NE^2)/(hv109NE_cor^2 * (1-hv109NE_cor)^2),
+                                  var_logit_hv109PE = (se.hv109PE^2)/(hv109PE_cor^2 * (1-hv109PE_cor)^2),
+                                  var_logit_hv109SE = (se.hv109SE^2)/(hv109SE_cor^2 * (1-hv109SE_cor)^2),
+                                  var_logit_hv109SuE = (se.hv109SuE^2)/(hv109SuE_cor^2 * (1-hv109SuE_cor)^2),
+                                  
+                                  # SE en escala logit (mantener nombres originales)
+                                  se_hv109NE_cor = var_logit_hv109NE,
+                                  se_hv109PE_cor = var_logit_hv109PE,
+                                  se_hv109SE_cor = var_logit_hv109SE,
+                                  se_hv109SuE_cor = var_logit_hv109SuE
+                                ) %>% 
+                                
+                                mutate(
+                                  # Floor para varianzas muy pequeñas
+                                  across(c(var_logit_hv109NE:var_logit_hv109SuE, se_hv109NE_cor:se_hv109SuE_cor), 
+                                         .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                                  
+                                  # Precisión (inversa de varianza)
+                                  prec_logit_hv109NE = 1 / var_logit_hv109NE,
+                                  prec_logit_hv109PE = 1 / var_logit_hv109PE,
+                                  prec_logit_hv109SE = 1 / var_logit_hv109SE,
+                                  prec_logit_hv109SuE = 1 / var_logit_hv109SuE
+                                )
+                              
+                            ) %>% 
+                            group_by(ubigeo) %>% 
+                            mutate(
+                              id.sp = cur_group_id()
+                            ) %>% 
+                            ungroup()),
+    
+    
+    
+    
+    wi_censo_total = map(.x = wi_directa,
+                         .f = ~distritos %>% 
+                           full_join(
+                             censo_final_loreto %>% 
+                               left_join(.x) %>% 
+                               
+                               mutate(
+                                 # MODIFICADO: Corrección epsilon con tolerancia numérica
+                                 across(.cols = hv2701st:hv2705th, 
+                                        .f = ~case_when(
+                                          .x <= epsilon ~ epsilon,
+                                          .x >= (1 - epsilon) ~ 1 - epsilon,
+                                          TRUE ~ .x
+                                        ), 
+                                        .names = '{.col}_cor'),
+                                 
+                                 # MODIFICADO: Logit manual sin función logit()
+                                 across(.cols = hv2701st_cor:hv2705th_cor, 
+                                        .f = ~log(.x / (1 - .x)), 
+                                        .names = '{.col}_logit'),
+                                 
+                                 # Varianza en escala logit
+                                 var_logit_hv2701st = (se.hv2701st^2)/(hv2701st_cor^2 * (1-hv2701st_cor)^2),
+                                 var_logit_hv2702nd = (se.hv2702nd^2)/(hv2702nd_cor^2 * (1-hv2702nd_cor)^2),
+                                 var_logit_hv2703rd = (se.hv2703rd^2)/(hv2703rd_cor^2 * (1-hv2703rd_cor)^2),
+                                 var_logit_hv2704th = (se.hv2704th^2)/(hv2704th_cor^2 * (1-hv2704th_cor)^2),
+                                 var_logit_hv2705th = (se.hv2705th^2)/(hv2705th_cor^2 * (1-hv2705th_cor)^2),
+                                 
+                                 # SE en escala logit (mantener nombres originales)
+                                 se_hv2701st_cor = var_logit_hv2701st,
+                                 se_hv2702nd_cor = var_logit_hv2702nd,
+                                 se_hv2703rd_cor = var_logit_hv2703rd,
+                                 se_hv2704th_cor = var_logit_hv2704th,
+                                 se_hv2705th_cor = var_logit_hv2705th
+                               ) %>% 
+                               
+                               mutate(
+                                 # Floor para varianzas muy pequeñas
+                                 across(c(var_logit_hv2701st:var_logit_hv2705th, se_hv2701st_cor:se_hv2705th_cor), 
+                                        .f = ~ifelse(.x < 1e-6, 1e-6, .x)),
+                                 
+                                 # Precisión (inversa de varianza)
+                                 prec_logit_hv2701st = 1 / var_logit_hv2701st,
+                                 prec_logit_hv2702nd = 1 / var_logit_hv2702nd,
+                                 prec_logit_hv2703rd = 1 / var_logit_hv2703rd,
+                                 prec_logit_hv2704th = 1 / var_logit_hv2704th,
+                                 prec_logit_hv2705th = 1 / var_logit_hv2705th
+                               )
+                             
+                           ) %>% 
+                           group_by(ubigeo) %>% 
+                           mutate(
+                             id.sp = cur_group_id()
+                           ) %>% 
+                           ungroup())
+  )
+```
+
+
+# 5. save datasets
+```{r}
+edu_censo_final=direct_estimation_censo_total %>% select(year,edu_censo_cpa) %>% 
+  unnest(edu_censo_cpa) %>% ungroup() %>% select(-geometry)
+
+wi_censo_final=direct_estimation_censo_total %>% select(year,wi_censo_cpa) %>% 
+  unnest(wi_censo_cpa) %>% ungroup() %>% select(-geometry)
+
+edu_censo_final_recat=direct_estimation_censo_total %>% select(year,edu_censo_cpa_recat) %>%
+  unnest(edu_censo_cpa_recat) %>% ungroup() %>% select(-geometry)
+
+wi_censo_final_recat=direct_estimation_censo_total %>% select(year,wi_censo_cpa_recat) %>% 
+  unnest(wi_censo_cpa_recat) %>% ungroup() %>% select(-geometry)
+
+
+wi_censo_final_recat_tercil=direct_estimation_censo_total %>% select(year,wi_censo_cpa_recat_ter) %>% 
+  unnest(wi_censo_cpa_recat_ter) %>% ungroup() %>% select(-geometry)
+
+#edu_censo_total=direct_estimation_censo_total %>% select(year,edu_censo_total) %>% unnest(edu_censo_total) %>% ungroup() %>% select(-geometry)
+# wi_censo_total=direct_estimation_censo_total %>% select(year,wi_censo_total) %>% unnest(wi_censo_total) %>% ungroup() %>% select(-geometry)
+```
+
+
+```{r, echo=FALSE}
+write.csv(edu_censo_final, "./data/edu_censo_final.csv", row.names = F)
+write.csv(wi_censo_final, "./data/wi_censo_final.csv", row.names = F)
+
+write.csv(edu_censo_final_recat, "./data/edu_censo_final_recat.csv", row.names = F)
+write.csv(wi_censo_final_recat, "./data/wi_censo_final_recat.csv", row.names = F)
+write.csv(wi_censo_final_recat_tercil, "./data/wi_censo_final_recat_tercil.csv", row.names = F)
+
+#write.csv(edu_censo_total, "./data/edu_censo_total.csv", row.names = F)
+#write.csv(wi_censo_total, "./data/wi_censo_total.csv", row.names = F)
+
+```
+
+```{r}
+year = c(2010:2020)
+df_final_edu <- map2_df(data_final_nest$edu_directa_recat, year, ~ mutate(.x, year = .y)) %>% 
+  as_tibble() %>% 
+  rename(
+    estimate = hv109_recat
+  ) %>% 
+  mutate(
+    index = "edu"
+  ) %>% 
+  select(year,ubigeo,index,everything())
+
+df_final_wi <- map2_df(data_final_nest$wi_directa_recat, year, ~ mutate(.x, year = .y)) %>% 
+  as_tibble() %>% 
+  rename(
+    estimate = hv270_recat
+  ) %>% 
+  mutate(
+    index = "wi"
+  ) %>% 
+  select(year,ubigeo,index,everything())
+
+df_final<-
+  bind_rows(df_final_edu,df_final_wi) %>% 
+  filter(year %in% c(2010,2012,2014,2016,2018,2020))
+
+write.csv(df_final,"./data/aux_data/fig1_data.csv",row.names = F)
+
+df_final_c<-
+  bind_rows(df_final_edu,df_final_wi) 
+
+write.csv(df_final_c,"./data/aux_data/fig1_data_complt.csv",row.names = F)
+  
+```
+

@@ -8,7 +8,7 @@ library(rcartocolor)
 
 data(Peru)
 distritos <- Peru %>% filter(dep == "LORETO")
-data_malaria <- read_csv("https://raw.githubusercontent.com/JoseMatta95/DHS_deforestation_malaria/refs/heads/main/Data/final_data/malaria_deforest_data.csv?token=GHSAT0AAAAAADGB4C3ZC3GGBSGIEQLEVLHO2FN4AHA")
+data_malaria <- read_csv("./data/malaria_deforest_data.csv")
 
 rivers<- st_read("./data/aux_data/data_shapefiles/rios-ana/Rios.shp")
 rivers<- st_transform(rivers,st_crs(distritos))
@@ -101,10 +101,10 @@ plot_grid(ggdraw() +
           map3,
           nrow = 1,
           rel_widths = c(.8,.1,.8),
-          labels = c("A","","B"))
+          labels = c("a","","b"))
 
 ##### sm fig 1 ----
-ggsave("./figures/sm_fig1.png", dpi = 800, bg = "white", height = 7, width = 12)
+ggsave("./figures/sm_fig1.pdf", dpi = 800, bg = "white", height = 7, width = 12)
 
 ### Loreto urbanization
 
@@ -168,7 +168,7 @@ g3<-
 
 ### Loreto rivers and ccpp
 
-rivers_loreto<-st_intersection(distritos,data)
+rivers_loreto<-st_intersection(distritos,rivers)
 ccpp <- ccpp %>% filter(cod_dpto == 16)
 
 g4<-
@@ -196,11 +196,11 @@ g4<-
 
 ##### sm fig 2 ----
 plot_grid(
-  plot_grid(g4,labels = c("A")),
-  plot_grid(g2,g3, labels = c("B","C")),
+  plot_grid(g4,labels = c("a")),
+  plot_grid(g2,g3, labels = c("b","c")),
   nrow = 2)
 
-ggsave("./figures/sm_fig2.png", dpi = 800, bg = "white", 
+ggsave("./figures/sm_fig2.pdf", dpi = 800, bg = "white", 
        height = 6, width = 9)
 
 ## 2. Supplementary methods ----
@@ -252,7 +252,7 @@ b<-  distritos_sf_predict_prop %>%
 
 plot_grid(a,b, ncol = 1, rel_heights = c(.8,.9))
 
-ggsave("./figures/sm_fig4.png", dpi = 800,bg = "white", width = 8)
+ggsave("./figures/sm_fig4.pdf", dpi = 800,bg = "white", width = 8)
 
 ##### sm fig 5 ----
 
@@ -295,6 +295,6 @@ b<-
 
 plot_grid(a,b, ncol = 1, rel_heights = c(.8,.9))
 
-ggsave("./figures/sm_fig5.png", dpi = 800,bg = "white", width = 8)
+ggsave("./figures/sm_fig5.pdf", dpi = 800,bg = "white", width = 8)
 
 

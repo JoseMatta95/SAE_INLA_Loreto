@@ -1,363 +1,235 @@
 ---
-title: "Untitled"
-output: html_document
-date: "2025-05-30"
+title: "Aggregated consistency check — EDU & WI"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: cosmo
+date: "2026-04-05"
 ---
 
 ```{r setup, include=FALSE}
-#knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, fig.height= 10, fig.width= 8)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-
 ```{r}
+library(INLA)
 library(tidyverse)
 library(survey)
-library(janitor)
-library(sf)
-library(viridis)
 library(ggsci)
+library(cowplot)
+library(gt)
 
 source("./_functions/functions.R")
 ```
 
-# data
-```{r}
-wi_edu_2010_2020<- read.csv("./data/wi_edu_2010_2020.csv")
+# Data
 
-pop_dist <- read.csv("./data/aux_data/malaria_dist_total.csv") %>% 
-  select(year,ubigeo,pop_landscan) %>% 
+```{r}
+wi_edu <- read.csv("./data/wi_edu_2010_2020.csv")
+```
+
+# Helper functions
+
+Reconstrucción de η desde el campo latente muestreado (modelos SPDE).
+Para modelos no-SPDE (BYM2/beta-binomial), `Predictor:i` está disponible
+directamente en el campo latente.
+
+# Direct estimates — ENDES
+
+```{r}
+data_nest <- wi_edu %>%
+  group_by(year) %>%
+  nest() %>%
   mutate(
-    ubigeo = as.character(ubigeo)
+    svy = map(data, ~ svydesign(ids = ~hv001, strata = ~hv022,
+                                weights = ~hv005, data = .x, nest = TRUE)),
+    edu_dep = map(svy, ~ svyby(~hv109_recat, ~hv023, design = .x,
+                               svymean, keep.var = TRUE)),
+    wi_dep  = map(svy, ~ svyby(~hv270_recat, ~hv023, design = .x,
+                               svymean, keep.var = TRUE))
+  )
+
+direct_edu <- data_nest %>%
+  select(year, edu_dep) %>% unnest(edu_dep) %>% ungroup() %>%
+  select(year, hv109_recat, se)
+
+direct_wi <- data_nest %>%
+  select(year, wi_dep) %>% unnest(wi_dep) %>% ungroup() %>%
+  select(year, hv270_recat, se)
+```
+
+# Aggregated consistency — EDU
+
+```{r}
+edu_model_list <- list(
+  list(fit = fit_spde_edu,      data = cluster_edu,     A_obs = A_obs_edu, label = "m1"),
+  list(fit = fit_spde_hier_edu, data = cluster_edu,     A_obs = A_obs_edu, label = "m2"),
+  list(fit = fit_spde_pc1_edu,  data = cluster_edu_pca, A_obs = A_obs_edu, label = "m3"),
+  list(fit = fit_spde_pc12_edu, data = cluster_edu_pca, A_obs = A_obs_edu, label = "m4")
+)
+
+predict_edu <- map_dfr(edu_model_list, function(m) {
+  resumen_anual_samples(m$fit, m$data, spde = TRUE, A_obs = m$A_obs) %>%
+    mutate(modelo = m$label)
+})
+```
+
+```{r}
+validation_edu <- direct_edu %>%
+  full_join(predict_edu, by = "year") %>%
+  mutate(
+    low_direct = hv109_recat - 1.96 * se,
+    upp_direct = hv109_recat + 1.96 * se,
+    check      = ifelse(hv109_recat > li_95 & hv109_recat < ls_95,
+                        "cumple", "no cumple"),
+    se_modelo  = (ls_95 - li_95) / (2 * 1.96),
+    z          = (hv109_recat - media) / sqrt(se^2 + se_modelo^2),
+    p_value    = 2 * pnorm(-abs(z)),
+    sig        = ifelse(p_value < 0.05, "S", "NS")
   )
 ```
 
-# Aggregated consistency check - EDU
+## Summary table
 
-1. Estimates will be calculated for each year for the whole Loreto department and provinces, 
-2. The district-level estimates by year will be aggregated to the department-year and province-year levels,
-3. It will be verified if the direct estimate is on the confidence interval (CI) of the SAE-INLA model estimates.
-
-The logic is that the true value is expected to lie within the CI of the model/design-based estimate.
-ENDES assumes that the true value lies within its own CI. For the SAE-INLA models, we would expect 
-ENDES estimates to fall within the model-generated CIs.
-
-## Departament: Loreto
 ```{r}
-# 1. Estimates will be calculated for each year for the whole Loreto department and provinces
-
-data_final_nest<-
-  wi_edu_2010_2020 %>% 
-  group_by(year) %>% 
-  nest() %>% 
-  mutate(
-    svydesign_endes= map(.x=data,
-                         .f = ~svydesign(ids = ~hv001, strata = ~hv022, 
-                                         weights = ~hv005, data = .x, nest = T)),
-    
-    wi_dep = map(.x = svydesign_endes,
-                 .f = ~svyby(~hv270_recat, ~hv023, design = .x, svymean, keep.var = T)),
-    
-    edu_dep = map(.x = svydesign_endes,
-                  .f = ~svyby(~hv109_recat, ~hv023, design = .x, svymean, keep.var = T)),
-    
-    
-    wi_prov = map(.x = svydesign_endes,
-                  .f = ~svyby(~hv270_recat, ~ubigeo_prov, design = .x, svymean, keep.var = T)),
-    
-    edu_prov = map(.x = svydesign_endes,
-                  .f = ~svyby(~hv109_recat, ~ubigeo_prov, design = .x, svymean, keep.var = T))
-    )
+validation_edu %>%
+  count(modelo, check) %>%
+  pivot_wider(names_from = check, values_from = n, values_fill = 0) %>%
+  gt() %>%
+  tab_header(title = md("**EDU — years within SAE 95% CI**"))
 ```
 
+## Plot
 
 ```{r}
-# 2. The district-level estimates by year will be aggregated to the department-year level
-
-modelos<- list(modelo_fh2_spatial_edu_2=modelo_fh2_spatial_edu_2,
-               modelo_fh2_spatial_edu_4=modelo_fh2_spatial_edu_4,
-               modelo_fh5_spatial_edu_2=modelo_fh5_spatial_edu_2,
-               modelo_fh8_spatial_edu_2=modelo_fh8_spatial_edu_2,
-               modelo_fh10_spatial_edu_2=modelo_fh10_spatial_edu_2)
-
-predict_sae_loreto <- imap_dfr(
-  .x = modelos,
-  .f = ~ {
-    resumen_anual_samples(modelo_inla = .x, data = edu_censo_final2) %>% 
-      mutate(modelo = .y) 
-  }
+edu_labels <- c(
+  "m1" = "Me-1",
+  "m2" = "Me-2",
+  "m3" = "Me-3",
+  "m4" = "Me-4"
 )
-```
 
-
-```{r}
-#3. It will be verified if the direct estimate is on the confidence interval (CI) of 
-# the SAE-INLA model estimates
-
-validation_edu_depart<- 
-  
-data_final_nest %>% 
-  select(year,edu_dep) %>% 
-  unnest(edu_dep) %>% 
-  ungroup() %>%
-  select(year,hv109_recat,se) %>% 
-  
-  full_join(predict_sae_loreto) %>% 
-  
-  mutate(
-    check = ifelse(hv109_recat > li_95 & hv109_recat<ls_95, "cumple", "no cumple"),
-    
-    
-    se_modelo = (ls_95 - li_95) / (2 * 1.96),
-    z = (hv109_recat - media) / sqrt(se^2 + se_modelo^2),
-    p_value = 2 * pnorm(-abs(z)),
-    
-    diferencia_significativa = ifelse(p_value < 0.05,"S","NS")
-    
-  )
-```
-
-```{r, warning=F}
-#### Metrics ----
-perform.metrics <- yardstick::metric_set(mae,smape,rmse)
-perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
-
-##### total metrics----
-tbl.yrd.full <-  validation_edu_depart %>% 
-  group_by(modelo,year) %>%
-  perform.metrics(truth = hv109_recat, estimate = media)
-```
-
-
-```{r, warning=F}
-labelsfacet <- c(
-  "modelo_fh2_spatial_edu_2" = "Me-2",
-  "modelo_fh2_spatial_edu_4" = "Me-4",
-  "modelo_fh5_spatial_edu_2" = "Me-5",
-  "modelo_fh8_spatial_edu_2" = "Me-8",
-  "modelo_fh10_spatial_edu_2" = "Me-10"
-)
-year_estimate_edu<-
-  
-tbl.yrd.full %>% 
-  mutate(
-    .estimate = round(.estimate,3)
-  ) %>% 
-  filter(.metric == "mae") %>% 
-  
-  full_join(
-    validation_edu_depart %>% 
-      mutate(
-        low_direct = hv109_recat - 1.96*se,
-        upp_direct = hv109_recat + 1.96*se
-      ),
-    
-    by = c("modelo","year")
-  ) %>% 
-  
-  select(year,modelo,hv109_recat,low_direct,upp_direct,
-         media,li_95,ls_95,.estimate) %>% 
-    mutate(
-      mae2 = as.factor(ifelse(.estimate <=0.03,"<= 0.03",
-                                  ifelse(.estimate >0.03 & 
-                                           .estimate <=0.05,"0.03-0.05",
-                                         ifelse(.estimate >0.05 & 
-                                                  .estimate <=0.07,"0.05-0.07", NA)))),
-    
-    
-    modelo = factor(modelo, levels = c("modelo_fh2_spatial_edu_2","modelo_fh2_spatial_edu_4",
-                                       "modelo_fh5_spatial_edu_2","modelo_fh8_spatial_edu_2",
-                                       "modelo_fh10_spatial_edu_2"))
-  ) %>% 
-  
-  ggplot()+
-  
-  geom_pointrange(aes(x =hv109_recat, y = as.factor(year), 
-                      xmin = low_direct, xmax = upp_direct,
-                      color = "Direct estimate",
-                      size = mae2),
-                  alpha = .5, linewidth = 1.5) +
-  geom_pointrange(aes(x =media, y = as.factor(year),
-                      xmin = li_95, xmax = ls_95,
-                      color = "Predicted value",
-                      size = mae2),
-                  alpha = .5) +
-  
+plot_edu <-
+  validation_edu %>%
+  mutate(modelo = factor(modelo, levels = names(edu_labels))) %>%
+  ggplot(aes(x = year)) +
+  geom_ribbon(aes(ymin = low_direct, ymax = upp_direct, fill = "Direct estimate"),
+              alpha = 0.25) +
+  geom_ribbon(aes(ymin = li_95, ymax = ls_95, fill = "Predicted value"),
+              alpha = 0.25) +
+  geom_line(aes(y = hv109_recat, color = "Direct estimate"), linewidth = 1) +
+  geom_line(aes(y = media,       color = "Predicted value"), linewidth = 1) +
   scale_color_manual(values = c("Direct estimate" = "red4",
-                                "Predicted value" = "blue4")) +
-  
-  scale_size_manual(
-  values = c("<= 0.03" = 0.5,
-             "0.03-0.05" = 0.8,
-             "0.05-0.07" = 1.1),
-  name = "MAE"
-) +
-  
+                                "Predicted value"  = "blue4"), name = NULL) +
+  scale_fill_manual(values  = c("Direct estimate" = "red4",
+                                "Predicted value"  = "blue4"), name = NULL) +
+  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)) +
+  labs(x = "Year", y = "Proportion") +
+  facet_wrap(~modelo, labeller = labeller(modelo = edu_labels)) +
   theme_minimal() +
-  labs(color = NULL,
-       x = "Year",
-       y = "Prop.") +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor= element_blank(),
-    panel.grid.major.x = element_blank(),
-    strip.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold")
-    #legend.box = "vertical"
-  ) +
-  facet_wrap(~modelo, scales = "free", labeller = labeller(modelo = labelsfacet)) +
-  coord_flip()
+  theme(legend.position    = "bottom",
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_blank(),
+        strip.text         = element_text(face = "bold"),
+        axis.title         = element_text(face = "bold"),
+        axis.text          = element_text(size = 10))
 
+plot_edu
 ```
 
-# Aggregated consistency check - WI
+# Aggregated consistency — WI (beta-binomial)
 
-## Departament: Loreto
 ```{r}
-modelos2<- list(model_fit2spat_1=model_fit2spat_1,
-               model_fit2spat_2=model_fit2spat_2,
-               model_fit5spat_2=model_fit5spat_2,
-               model_fit8spat_2=model_fit8spat_2,
-               model_fit10spat_2=model_fit10spat_2)
-
-predict_sae_loreto <- imap_dfr(
-  .x = modelos2,
-  .f = ~ {
-    resumen_anual_samples(modelo_inla = .x, data = wi_censo_final2) %>% 
-      mutate(modelo = .y) 
-  }
+wi_model_list <- list(
+  list(fit = res_bb_m1$fit, data = cluster_wi,     obs_idx = 1:nrow(cluster_wi),     label = "m1"),
+  list(fit = res_bb_m2$fit, data = cluster_wi,     obs_idx = 1:nrow(cluster_wi),     label = "m2"),
+  list(fit = res_bb_m3$fit, data = cluster_wi_pca, obs_idx = 1:nrow(cluster_wi_pca), label = "m3"),
+  list(fit = res_bb_m4$fit, data = cluster_wi_pca, obs_idx = 1:nrow(cluster_wi_pca), label = "m4")
 )
+
+predict_wi <- map_dfr(wi_model_list, function(m) {
+  resumen_anual_samples(m$fit, m$data, spde = FALSE, obs_idx = m$obs_idx) %>%
+    mutate(modelo = m$label)
+})
 ```
 
-
 ```{r}
-validation_wi_dep<-
-  data_final_nest %>% 
-  select(year,wi_dep) %>% 
-  unnest(wi_dep) %>% 
-  ungroup() %>%
-  select(year,hv270_recat,se) %>% 
-  
-  full_join(predict_sae_loreto) %>% 
-  
+validation_wi <- direct_wi %>%
+  full_join(predict_wi, by = "year") %>%
   mutate(
-    check = ifelse(hv270_recat > li_95 & hv270_recat<ls_95, "cumple", "no cumple"),
-    
-    
-    se_modelo = (ls_95 - li_95) / (2 * 1.96),
-    z = (hv270_recat - media) / sqrt(se^2 + se_modelo^2),
-    p_value = 2 * pnorm(-abs(z)),
-    
-    diferencia_significativa = ifelse(p_value < 0.05,"S","NS")
-    
+    low_direct = hv270_recat - 1.96 * se,
+    upp_direct = hv270_recat + 1.96 * se,
+    check      = ifelse(hv270_recat > li_95 & hv270_recat < ls_95,
+                        "cumple", "no cumple"),
+    se_modelo  = (ls_95 - li_95) / (2 * 1.96),
+    z          = (hv270_recat - media) / sqrt(se^2 + se_modelo^2),
+    p_value    = 2 * pnorm(-abs(z)),
+    sig        = ifelse(p_value < 0.05, "S", "NS")
   )
 ```
 
-```{r, warning=F}
-#### Metrics ----
-perform.metrics <- yardstick::metric_set(mae,smape,rmse)
-perform.metrics.dist <- yardstick::metric_set(mae,smape,rmse)
-
-##### total metrics----
-tbl.yrd.full <-  validation_wi_dep %>% 
-  group_by(modelo,year) %>%
-  perform.metrics(truth = hv270_recat, estimate = media)
-```
-
-
-```{r, warning=F}
-
-labelsfacet2 <- c(
-  "model_fit2spat_1" = "Mp-1",
-  "model_fit2spat_2" = "Mp-2",
-  "model_fit5spat_2" = "Mp-6",
-  "model_fit8spat_2" = "Mp-8",
-  "model_fit10spat_2" = "Mp-10"
-)
-
-year_estimate_wi<-
-tbl.yrd.full %>% 
-  mutate(
-    .estimate = round(.estimate,3)
-  ) %>% 
-  filter(.metric == "mae") %>% 
-  
-  full_join(
-    validation_wi_dep %>% 
-      mutate(
-        low_direct = hv270_recat - 1.96*se,
-        upp_direct = hv270_recat + 1.96*se
-      ),
-    
-    by = c("modelo","year")
-  ) %>% 
-  
-  select(year,modelo,hv270_recat,low_direct,upp_direct,
-         media,li_95,ls_95,.estimate) %>% 
-    mutate(
-      mae2 = as.factor(ifelse(.estimate <=0.03,"<= 0.03",
-                                  ifelse(.estimate >0.03 & 
-                                           .estimate <=0.05,"0.03-0.05",
-                                         ifelse(.estimate >0.05 & 
-                                                  .estimate <=0.07,"0.05-0.07", NA)))),
-    
-    
-    modelo = factor(modelo, levels = c("model_fit2spat_1","model_fit2spat_2",
-                                       "model_fit5spat_2","model_fit8spat_2",
-                                       "model_fit10spat_2"))
-  ) %>% 
-  
-  ggplot()+
-  
-  geom_pointrange(aes(x =hv270_recat, y = as.factor(year), 
-                      xmin = low_direct, xmax = upp_direct,
-                      color = "Direct estimate",
-                      size = mae2),
-                  alpha = .5, linewidth = 1.5) +
-  geom_pointrange(aes(x =media, y = as.factor(year),
-                      xmin = li_95, xmax = ls_95,
-                      color = "Predicted value",
-                      size = mae2),
-                  alpha = .5) +
-  
-  scale_color_manual(values = c("Direct estimate" = "red4",
-                                "Predicted value" = "blue4")) +
-  
-  scale_size_manual(
-  values = c("<= 0.03" = 0.5,
-             "0.03-0.05" = 0.8,
-             "0.05-0.07" = 1.1),
-  name = "MAE"
-) +
-  
-  theme_minimal() +
-  labs(color = NULL,
-       x = "Year",
-       y = "Prop.") +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor= element_blank(),
-    panel.grid.major.x = element_blank(),
-    strip.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold")
-    #legend.box = "vertical"
-  ) +
-  facet_wrap(~modelo, scales = "free", labeller = labeller(modelo = labelsfacet2)) +
-  coord_flip()
-```
+## Summary table
 
 ```{r}
-year_estimate_wi
-year_estimate_edu
+validation_wi %>%
+  count(modelo, check) %>%
+  pivot_wider(names_from = check, values_from = n, values_fill = 0) %>%
+  gt() %>%
+  tab_header(title = md("**WI — years within SAE 95% CI (posterior samples)**"))
+```
 
-g1 <- year_estimate_wi + theme(legend.position = "none")
-g2 <- year_estimate_edu + theme(legend.position = "none")
-legend <- get_legend2(year_estimate_wi)
+## Plot
 
-plot_grid(g2,g1,legend,ncol = 1, rel_heights = c(0.9,0.9,0.05), labels = c("A","B"))
+```{r}
+wi_labels <- c(
+  "m1" = "Mp-1",
+  "m2" = "Mp-2",
+  "m3" = "Mp-3",
+  "m4" = "Mp-4"
+)
 
-ggsave("./figures/fig7.png", dpi = 800, bg = "white",width = 14, height = 9)
+plot_wi <-
+  validation_wi %>%
+  mutate(modelo = factor(modelo, levels = names(wi_labels))) %>%
+  ggplot(aes(x = year)) +
+  geom_ribbon(aes(ymin = low_direct, ymax = upp_direct, fill = "Direct estimate"),
+              alpha = 0.25) +
+  geom_ribbon(aes(ymin = li_95, ymax = ls_95, fill = "Predicted value"),
+              alpha = 0.25) +
+  geom_line(aes(y = hv270_recat, color = "Direct estimate"), linewidth = 1) +
+  geom_line(aes(y = media,       color = "Predicted value"), linewidth = 1) +
+  scale_color_manual(values = c("Direct estimate" = "red4",
+                                "Predicted value"  = "blue4"), name = NULL) +
+  scale_fill_manual(values  = c("Direct estimate" = "red4",
+                                "Predicted value"  = "blue4"), name = NULL) +
+  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)) +
+  labs(x = "Year", y = "Proportion") +
+  facet_wrap(~modelo, labeller = labeller(modelo = wi_labels)) +
+  theme_minimal() +
+  theme(legend.position    = "bottom",
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_blank(),
+        strip.text         = element_text(face = "bold"),
+        axis.title         = element_text(face = "bold"),
+        axis.text          = element_text(size = 10))
+
+plot_wi
+```
+
+# Combined figure
+
+```{r, fig.width=14, fig.height=9}
+g_edu  <- plot_edu + theme(legend.position = "none")
+g_wi   <- plot_wi  + theme(legend.position = "none")
+legend <- get_legend2(plot_edu)
+
+plot_grid(g_edu, g_wi, legend,
+          ncol = 1, rel_heights = c(0.9, 0.9, 0.05),
+          labels = c("a", "b", ""))
+
+ggsave("./figures/fig4.pdf", dpi = 800, bg = "white", width = 14, height = 9)
 ```
 
 ```{r}

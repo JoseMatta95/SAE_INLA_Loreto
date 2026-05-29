@@ -40,6 +40,7 @@ wi_edu_2016_2019<-
   select(shdistri,
          shprovin,
          year,
+         hhid,
          hv001, #conglomerado
          hv002, #vivienda
          hv004, #unidad de muestreo
@@ -48,8 +49,10 @@ wi_edu_2016_2019<-
          hv005, # factor de ponderacion hogar
          hv022, #estrato
          hv025,
-         #longitudx,
-         #latitudy,
+         longitudx,
+         latitudy,
+         long_ccpp,
+         lat_ccpp,
          
          hv109, # nivel educativo alcanzado
          hv106,
@@ -57,7 +60,7 @@ wi_edu_2016_2019<-
          hv271
   ) %>% 
   
-  filter(hv023 == 16) %>% 
+  #filter(hv023 == 16) %>% 
   
   mutate(
     cod_dist = ifelse(shdistri<10,paste0("0",shdistri),shdistri),
@@ -83,13 +86,16 @@ wi_edu_2016_2019<-
     
     hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0), # at least 3rd WI
     
-    hv025 = ifelse(hv025 == 1,0,1)
+    hv025 = ifelse(hv025 == 1,0,1),
+    
+    long = ifelse(is.na(longitudx),long_ccpp,longitudx),
+    lat = ifelse(is.na(latitudy),lat_ccpp,latitudy)
     
   ) %>% 
   zap_labels()
 
 
-# since 2020, module codification number has been modified in INEI web. 
+  # since 2020, module codification number has been modified in INEI web. 
 # for example, housing module in 2019 was 64, but now it is 1629
 
 wi_edu_2020<-
@@ -112,6 +118,7 @@ wi_edu_2020<-
            clean_names() ) %>% 
   select(
     year,
+    hhid,
     hv001, #conglomerado
     hv002, #vivienda
     hv004, #unidad de muestreo
@@ -120,8 +127,8 @@ wi_edu_2020<-
     hv005, # factor de ponderacion hogar
     hv022, #estrato
     hv025,
-    #longitudx,
-    #latitudy,
+    longitudx,
+    latitudy,
     
     hv109, # nivel educativo alcanzado
     hv106,
@@ -129,7 +136,7 @@ wi_edu_2020<-
     hv271# indice de riqueza)
   ) %>% 
   
-  filter(hv023 == 16) %>% 
+  #filter(hv023 == 16) %>% 
   
   mutate(
     hv270 = as.character(hv270),
@@ -182,7 +189,8 @@ wi_edu_2010_2020<-
   ) %>% 
   as_tibble()
 
-write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020)),"./data/wi_edu_2010_2020.csv", row.names = F)
+write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020) & hv023 == 16),"./data/wi_edu_2010_2020.csv", row.names = F)
+write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020)),"./data/wi_edu_2010_2020_nacional.csv", row.names = F)
 write.csv(wi_edu_2010_2020,"./data/aux_data/_other/wi_edu_2009_2021.csv", row.names = F)
 
 # 2. CENSOS----
@@ -319,8 +327,8 @@ pca2<-ggplot(df_scree %>% filter(PC %in% c(1:15)), aes(x = PC, y = VarExp)) +
   ) +
   theme_bw()
 
-cowplot::plot_grid(pca1,pca2, labels = c("A","B"))
-ggsave("./figures/sm_fig3.png", dpi = 800, bg = "white", width = 18, height = 9)
+cowplot::plot_grid(pca1,pca2, labels = c("a","b"))
+ggsave("./figures/sm_fig3.pdf", dpi = 800, bg = "white", width = 18, height = 9)
 ## devolviendo id y agregando outcome
 
 censo_pca_20<-

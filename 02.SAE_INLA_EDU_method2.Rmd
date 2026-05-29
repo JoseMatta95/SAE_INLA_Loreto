@@ -1,0 +1,816 @@
+---
+title: "SAE: Education — Binomial PSU-level (BYM2 & SPDE)"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: cosmo
+date: "2026-04-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(INLA)
+library(tidyverse)
+library(sf)
+library(spdep)
+library(innovar)
+library(gt)
+library(ggsci)
+library(cowplot)
+library(yardstick)
+
+data("Peru")
+```
+
+# Data
+
+```{r}
+wi_edu <- read.csv("./data/wi_edu_2010_2020.csv") %>%
+  mutate(ubigeo = as.character(ubigeo))
+
+distritos <- Peru %>%
+  mutate(ubigeo = as.character(ubigeo)) %>%
+  filter(dep == "LORETO") %>%
+  arrange(ubigeo)
+
+edu_censo_final<- read.csv("./data/edu_censo_final_recat.csv") %>% 
+  mutate(
+    ubigeo = as.character(ubigeo),
+    direct_low = hv109_recat - 1.96*se^2,
+    direct_upp = hv109_recat + 1.96*se^2
+  ) %>% 
+  select(year,ubigeo,hv109_recat,direct_low,direct_upp) %>% 
+  filter(!is.na(hv109_recat))
+
+censo_pca <- read.csv("./data/censo_2017/censo_2017_pca_20.csv") %>%
+  mutate(ubigeo = as.character(ubigeo))
+```
+
+```{r}
+district_levels <- sort(unique(distritos$ubigeo))
+year_levels     <- 2010:2020
+prov_levels     <- sort(unique(substr(district_levels, 1, 4)))
+
+pca_scores <- censo_pca %>% select(ubigeo, pc1, pc2)
+dist_names <- distritos %>% st_drop_geometry() %>% select(ubigeo, distr)
+
+cluster_edu <- wi_edu %>%
+  filter(!is.na(hv109_recat), !is.na(long), !is.na(lat)) %>%
+  group_by(hv001, ubigeo, year, long, lat) %>%
+  summarise(n = n(), y = sum(hv109_recat), sum_w = sum(hv005), .groups = "drop") %>%
+  mutate(
+    ubigeo      = as.character(ubigeo),
+    id.sp       = match(ubigeo, district_levels),
+    id.time     = match(year,   year_levels),
+    ubigeo_prov = substr(ubigeo, 1, 4),
+    id.prov     = match(ubigeo_prov, prov_levels)
+  )
+
+cat("EDU — PSU-year rows:", nrow(cluster_edu),
+    "| Districts:", n_distinct(cluster_edu$ubigeo), "of 53\n")
+```
+
+```{r}
+pred_grid <- expand.grid(
+  ubigeo = district_levels,
+  year   = year_levels,
+  stringsAsFactors = FALSE
+) %>%
+  mutate(
+    id.sp   = match(ubigeo, district_levels),
+    id.time = match(year,   year_levels)
+  )
+
+pred_grid_edu <- pred_grid %>%
+  mutate(
+    ubigeo_prov = substr(ubigeo, 1, 4),
+    id.prov     = match(ubigeo_prov, prov_levels)
+  )
+
+pc_prec <- list(prec = list(prior = "pc.prec", param = c(1, 0.01)))
+
+```
+
+```{r}
+psu_coords <- as.matrix(cluster_edu[, c("long", "lat")])
+
+loreto_bdry <- distritos %>%
+  st_union() %>% st_transform(4326) %>%
+  as("Spatial") %>% inla.sp2segment()
+
+mesh <- inla.mesh.2d(
+  loc      = psu_coords,
+  boundary = loreto_bdry,
+  max.edge = c(0.25, 0.6),
+  offset   = c(0.1,  0.5),
+  cutoff   = 0.08
+)
+cat("Mesh nodes:", mesh$n, "\n")
+
+spde     <- inla.spde2.pcmatern(mesh, alpha = 2,
+                                prior.range = c(1.0, 0.01),
+                                prior.sigma = c(1.0, 0.01))
+idx_spde <- inla.spde.make.index("i.field", n.spde = mesh$n)
+
+centroids_df <- distritos %>%
+  st_centroid() %>% st_transform(4326) %>% st_coordinates() %>%
+  as.data.frame() %>%
+  mutate(ubigeo = distritos$ubigeo)
+
+pred_grid_spde     <- pred_grid %>% left_join(centroids_df, by = "ubigeo")
+pred_grid_spde_pca <- pred_grid_spde %>% left_join(pca_scores, by = "ubigeo")
+A_pred             <- inla.spde.make.A(mesh, loc = as.matrix(pred_grid_spde[, c("X","Y")]))
+A_obs_edu          <- inla.spde.make.A(mesh, loc = psu_coords)
+cluster_edu_pca    <- cluster_edu %>% left_join(pca_scores, by = "ubigeo")
+
+cat("NAs in pc1:", sum(is.na(cluster_edu_pca$pc1)), "\n")
+```
+
+# Fit INLA
+
+## SPDE + RW2
+
+```{r}
+stack_obs_edu <- inla.stack(
+  data    = list(y = cluster_edu$y, n = cluster_edu$n),
+  A       = list(A_obs_edu, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1, id.time = cluster_edu$id.time)),
+  tag = "obs"
+)
+stack_pred_edu <- inla.stack(
+  data    = list(y = NA, n = NA),
+  A       = list(A_pred, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1, id.time = pred_grid_spde$id.time)),
+  tag = "pred"
+)
+stack_full_edu <- inla.stack(stack_obs_edu, stack_pred_edu)
+
+formula_spde <- y ~ -1 + intercept +
+  f(i.field, model = spde) +
+  f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
+
+fit_spde_edu <- inla(
+  formula_spde,
+  family            = "binomial",
+  Ntrials           = inla.stack.data(stack_full_edu)$n,
+  data              = inla.stack.data(stack_full_edu),
+  control.predictor = list(A = inla.stack.A(stack_full_edu),
+                           compute = TRUE, link = 1),
+  control.compute   = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE),
+  verbose           = FALSE
+)
+
+pred_idx_spde_edu <- inla.stack.index(stack_full_edu, "pred")$data
+obs_idx_spde_edu  <- inla.stack.index(stack_full_edu, "obs")$data
+
+pred_spde_edu <- pred_grid_spde %>%
+  select(ubigeo, year, id.sp, id.time) %>%
+  mutate(
+    model    = "m1",
+    mean     = fit_spde_edu$summary.fitted.values$mean[pred_idx_spde_edu],
+    median   = fit_spde_edu$summary.fitted.values$`0.5quant`[pred_idx_spde_edu],
+    lower    = fit_spde_edu$summary.fitted.values$`0.025quant`[pred_idx_spde_edu],
+    upper    = fit_spde_edu$summary.fitted.values$`0.975quant`[pred_idx_spde_edu],
+    sd       = fit_spde_edu$summary.fitted.values$sd[pred_idx_spde_edu],
+    ci_width = upper - lower
+  )
+```
+
+```{r}
+round(fit_spde_edu$summary.hyperpar, 3)
+```
+
+## SPDE + IID(prov) + RW2
+
+```{r}
+stack_obs_edu_hier <- inla.stack(
+  data    = list(y = cluster_edu$y, n = cluster_edu$n),
+  A       = list(A_obs_edu, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = cluster_edu$id.time,
+                            id.prov   = cluster_edu$id.prov)),
+  tag = "obs"
+)
+stack_pred_edu_hier <- inla.stack(
+  data    = list(y = NA, n = NA),
+  A       = list(A_pred, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = pred_grid_spde$id.time,
+                            id.prov   = pred_grid_edu$id.prov)),
+  tag = "pred"
+)
+stack_full_edu_hier <- inla.stack(stack_obs_edu_hier, stack_pred_edu_hier)
+
+formula_spde_hier <- y ~ -1 + intercept +
+  f(i.field, model = spde) +
+  f(id.prov, model = "iid",
+    hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
+  f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
+
+fit_spde_hier_edu <- inla(
+  formula_spde_hier,
+  family            = "binomial",
+  Ntrials           = inla.stack.data(stack_full_edu_hier)$n,
+  data              = inla.stack.data(stack_full_edu_hier),
+  control.predictor = list(A = inla.stack.A(stack_full_edu_hier),
+                           compute = TRUE, link = 1),
+  control.compute   = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE),
+  verbose           = FALSE
+)
+
+pred_idx_spde_hier_edu <- inla.stack.index(stack_full_edu_hier, "pred")$data
+obs_idx_spde_hier_edu  <- inla.stack.index(stack_full_edu_hier, "obs")$data
+
+pred_spde_hier_edu <- pred_grid_spde %>%
+  select(ubigeo, year, id.sp, id.time) %>%
+  mutate(
+    model    = "m2",
+    mean     = fit_spde_hier_edu$summary.fitted.values$mean[pred_idx_spde_hier_edu],
+    median   = fit_spde_hier_edu$summary.fitted.values$`0.5quant`[pred_idx_spde_hier_edu],
+    lower    = fit_spde_hier_edu$summary.fitted.values$`0.025quant`[pred_idx_spde_hier_edu],
+    upper    = fit_spde_hier_edu$summary.fitted.values$`0.975quant`[pred_idx_spde_hier_edu],
+    sd       = fit_spde_hier_edu$summary.fitted.values$sd[pred_idx_spde_hier_edu],
+    ci_width = upper - lower
+  )
+```
+
+```{r}
+round(fit_spde_hier_edu$summary.hyperpar, 3)
+```
+
+## SPDE + pc1 + RW2
+
+```{r}
+stack_obs_edu_pc1 <- inla.stack(
+  data    = list(y = cluster_edu_pca$y, n = cluster_edu_pca$n),
+  A       = list(A_obs_edu, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = cluster_edu_pca$id.time,
+                            pc1       = cluster_edu_pca$pc1)),
+  tag = "obs"
+)
+stack_pred_edu_pc1 <- inla.stack(
+  data    = list(y = NA, n = NA),
+  A       = list(A_pred, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = pred_grid_spde_pca$id.time,
+                            pc1       = pred_grid_spde_pca$pc1)),
+  tag = "pred"
+)
+stack_full_edu_pc1 <- inla.stack(stack_obs_edu_pc1, stack_pred_edu_pc1)
+
+formula_spde_pc1 <- y ~ -1 + intercept + pc1 +
+  f(i.field, model = spde) +
+  f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
+
+fit_spde_pc1_edu <- inla(
+  formula_spde_pc1,
+  family            = "binomial",
+  Ntrials           = inla.stack.data(stack_full_edu_pc1)$n,
+  data              = inla.stack.data(stack_full_edu_pc1),
+  control.predictor = list(A = inla.stack.A(stack_full_edu_pc1),
+                           compute = TRUE, link = 1),
+  control.compute   = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE),
+  verbose           = FALSE
+)
+
+pred_idx_spde_pc1_edu <- inla.stack.index(stack_full_edu_pc1, "pred")$data
+obs_idx_spde_pc1_edu  <- inla.stack.index(stack_full_edu_pc1, "obs")$data
+
+pred_spde_pc1_edu <- pred_grid_spde_pca %>%
+  select(ubigeo, year, id.sp, id.time) %>%
+  mutate(
+    model    = "m3",
+    mean     = fit_spde_pc1_edu$summary.fitted.values$mean[pred_idx_spde_pc1_edu],
+    median   = fit_spde_pc1_edu$summary.fitted.values$`0.5quant`[pred_idx_spde_pc1_edu],
+    lower    = fit_spde_pc1_edu$summary.fitted.values$`0.025quant`[pred_idx_spde_pc1_edu],
+    upper    = fit_spde_pc1_edu$summary.fitted.values$`0.975quant`[pred_idx_spde_pc1_edu],
+    sd       = fit_spde_pc1_edu$summary.fitted.values$sd[pred_idx_spde_pc1_edu],
+    ci_width = upper - lower
+  )
+```
+
+```{r}
+round(fit_spde_pc1_edu$summary.fixed, 3)
+round(fit_spde_pc1_edu$summary.hyperpar, 3)
+```
+
+## SPDE + pc1 + pc2 + RW2
+
+```{r}
+stack_obs_edu_pc12 <- inla.stack(
+  data    = list(y = cluster_edu_pca$y, n = cluster_edu_pca$n),
+  A       = list(A_obs_edu, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = cluster_edu_pca$id.time,
+                            pc1       = cluster_edu_pca$pc1,
+                            pc2       = cluster_edu_pca$pc2)),
+  tag = "obs"
+)
+stack_pred_edu_pc12 <- inla.stack(
+  data    = list(y = NA, n = NA),
+  A       = list(A_pred, 1),
+  effects = list(idx_spde,
+                 data.frame(intercept = 1,
+                            id.time   = pred_grid_spde_pca$id.time,
+                            pc1       = pred_grid_spde_pca$pc1,
+                            pc2       = pred_grid_spde_pca$pc2)),
+  tag = "pred"
+)
+stack_full_edu_pc12 <- inla.stack(stack_obs_edu_pc12, stack_pred_edu_pc12)
+
+formula_spde_pc12 <- y ~ -1 + intercept + pc1 + pc2 +
+  f(i.field, model = spde) +
+  f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
+
+fit_spde_pc12_edu <- inla(
+  formula_spde_pc12,
+  family            = "binomial",
+  Ntrials           = inla.stack.data(stack_full_edu_pc12)$n,
+  data              = inla.stack.data(stack_full_edu_pc12),
+  control.predictor = list(A = inla.stack.A(stack_full_edu_pc12),
+                           compute = TRUE, link = 1),
+  control.compute   = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE),
+  verbose           = FALSE
+)
+
+pred_idx_spde_pc12_edu <- inla.stack.index(stack_full_edu_pc12, "pred")$data
+obs_idx_spde_pc12_edu  <- inla.stack.index(stack_full_edu_pc12, "obs")$data
+
+pred_spde_pc12_edu <- pred_grid_spde_pca %>%
+  select(ubigeo, year, id.sp, id.time) %>%
+  mutate(
+    model    = "m4",
+    mean     = fit_spde_pc12_edu$summary.fitted.values$mean[pred_idx_spde_pc12_edu],
+    median   = fit_spde_pc12_edu$summary.fitted.values$`0.5quant`[pred_idx_spde_pc12_edu],
+    lower    = fit_spde_pc12_edu$summary.fitted.values$`0.025quant`[pred_idx_spde_pc12_edu],
+    upper    = fit_spde_pc12_edu$summary.fitted.values$`0.975quant`[pred_idx_spde_pc12_edu],
+    sd       = fit_spde_pc12_edu$summary.fitted.values$sd[pred_idx_spde_pc12_edu],
+    ci_width = upper - lower
+  )
+```
+
+```{r}
+round(fit_spde_pc12_edu$summary.fixed, 3)
+round(fit_spde_pc12_edu$summary.hyperpar, 3)
+```
+
+# Summary
+
+```{r}
+model_labels <- c("m1", "m2", "m3", "m4")
+
+cpo_spde_edu      <- -2 * sum(log(fit_spde_edu$cpo$cpo     [obs_idx_spde_edu]),      na.rm = TRUE)
+cpo_spde_hier_edu <- -2 * sum(log(fit_spde_hier_edu$cpo$cpo[obs_idx_spde_hier_edu]), na.rm = TRUE)
+cpo_spde_pc1_edu  <- -2 * sum(log(fit_spde_pc1_edu$cpo$cpo [obs_idx_spde_pc1_edu]),  na.rm = TRUE)
+cpo_spde_pc12_edu <- -2 * sum(log(fit_spde_pc12_edu$cpo$cpo[obs_idx_spde_pc12_edu]), na.rm = TRUE)
+
+model_metrics_edu <- tibble(
+  Modelo = model_labels,
+  DIC   = c(fit_spde_edu$dic$dic,      fit_spde_hier_edu$dic$dic,
+            fit_spde_pc1_edu$dic$dic,   fit_spde_pc12_edu$dic$dic),
+  pD    = c(fit_spde_edu$dic$p.eff,    fit_spde_hier_edu$dic$p.eff,
+            fit_spde_pc1_edu$dic$p.eff, fit_spde_pc12_edu$dic$p.eff),
+  WAIC  = c(fit_spde_edu$waic$waic,    fit_spde_hier_edu$waic$waic,
+            fit_spde_pc1_edu$waic$waic, fit_spde_pc12_edu$waic$waic),
+  pWAIC = c(fit_spde_edu$waic$p.eff,   fit_spde_hier_edu$waic$p.eff,
+            fit_spde_pc1_edu$waic$p.eff,fit_spde_pc12_edu$waic$p.eff),
+  logML = c(fit_spde_edu$mlik[1,1],    fit_spde_hier_edu$mlik[1,1],
+            fit_spde_pc1_edu$mlik[1,1], fit_spde_pc12_edu$mlik[1,1]),
+  CPO   = c(cpo_spde_edu, cpo_spde_hier_edu, cpo_spde_pc1_edu, cpo_spde_pc12_edu)
+)
+```
+
+## Summary table
+
+```{r}
+model_metrics_edu %>%
+  arrange(WAIC) %>%
+  gt() %>%
+  tab_header(title = md("**INLA model comparison — Education**")) %>%
+  fmt_number(columns = c(DIC, pD, WAIC, pWAIC, logML, CPO), decimals = 2)
+```
+
+# Model accuracy
+
+```{r}
+pred_all_edu <- bind_rows(pred_spde_edu, pred_spde_hier_edu,
+                          pred_spde_pc1_edu, pred_spde_pc12_edu)
+
+fitted_vals <- pred_all_edu %>%
+  left_join(edu_censo_final, by = c("ubigeo", "year")) %>%
+  rename(modelo = model, estimacion_real = hv109_recat, fit = mean)
+```
+
+```{r}
+perform.metrics      <- yardstick::metric_set(mae, mase,smape, rmse)
+perform.metrics.dist <- yardstick::metric_set(mae, smape, rmse)
+
+tbl.yrd.full <- fitted_vals %>%
+  group_by(modelo) %>%
+  perform.metrics(truth = estimacion_real, estimate = fit)
+
+tbl.yrd.dist_prop <- fitted_vals %>%
+  group_by(modelo, ubigeo) %>%
+  perform.metrics.dist(truth = estimacion_real, estimate = fit)
+
+tbl.yrd.full_year <- fitted_vals %>%
+  group_by(modelo, year) %>%
+  perform.metrics(truth = estimacion_real, estimate = fit)
+```
+
+## Table in-sample accuracy metrics
+
+```{r}
+tbl.yrd.full %>%
+  pivot_wider(id_cols = modelo, names_from = .metric, values_from = .estimate) %>%
+  arrange(smape) %>%
+  gt() %>%
+  
+  tab_header(title = md("in-sample accuracy metrics"))
+```
+
+## Comparison DE vs Pred. SAE ----
+
+```{r}
+figura2_a<-
+  fitted_vals %>% 
+  mutate(
+    modelo = factor(modelo,
+                    levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  ) %>%
+  filter(year %in% c(2010,2012,2014,2016,2018,2020)) %>%
+  ggplot(aes(x = estimacion_real, y = median, color = modelo)) +
+  geom_point(alpha = 0.5, size = 2, show.legend = F) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray40") +
+  scale_color_lancet() +
+  facet_grid(year~modelo) +
+  labs(
+    x = "Prop.% (Direct estimate)",
+    y = "Prop.% (Predicted)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(face = "bold"),
+        strip.text = element_text(face ="bold"),
+        legend.title = element_text(face = "bold"))
+```
+## Heatplot accuracy metrics by year
+
+```{r}
+graph_heatplot <-
+  bind_rows(tbl.yrd.full_year, tbl.yrd.full) %>%
+  mutate(
+    year2 = ifelse(is.na(year),"T. model",year)
+  ) %>% 
+  
+  filter(
+    .metric != "mase"
+  ) %>% 
+  mutate(
+    labels = round(.estimate,3),
+    legend_title = .metric,
+    
+    modelo = factor(modelo,
+                    levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  ) %>%
+  group_by(.metric) %>%
+  filter(year2 %in% c("2010","2012","2014","2016","2018","2020","T. model")) %>% 
+  nest() %>% 
+  
+  mutate(
+    grafico = map(.x = data,
+                  .f = ~ggplot(data = .x)+
+                    geom_tile(aes(x = modelo, y = as.factor(year2), fill = .estimate), alpha = .8, show.legend = F) +
+                    geom_text(aes(x = modelo, y = as.factor(year2),label =labels), size = 4) +
+                    scale_fill_tw3("blue")+
+                    labs(
+                      fill = NULL,
+                      y = NULL,
+                      x = .x$legend_title
+                    ) +
+                    
+                    theme_minimal() +
+                    scale_x_discrete(position = "top")+
+                    theme(
+                      axis.title.x = element_text(face = "bold"),
+                      axis.text = element_text(face = "bold", size = 8),
+                      strip.text = element_text(face ="bold"),
+                      legend.title = element_text(face = "bold", size = 8)
+                    )
+    )
+  )
+
+figura2_b<-cowplot::plot_grid(plotlist = graph_heatplot$grafico, rows = 1)
+figura2_b
+```
+### Figure 2
+```{r}
+figure2_parte1<-
+  cowplot::plot_grid(figura2_a,figura2_b, 
+                   cols = 1, 
+                   rel_heights = c(.65,.4))
+
+```
+
+## MSE (bias + variance)
+
+```{r, warning=FALSE}
+mse_area <-
+  fitted_vals %>%
+  mutate(
+    bias2    = (fit - estimacion_real)^2,
+    variance = sd^2,
+    mse      = bias2 + variance
+  )
+
+mse_area_long <-
+  mse_area %>%
+  pivot_longer(cols = c(mse, bias2, variance)) %>%
+  mutate(name = factor(name, levels = c("mse", "bias2", "variance"))) %>%
+  mutate(
+    modelo = factor(modelo,
+                    levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  )
+
+mse_area_year <-
+  mse_area %>%
+  group_by(modelo, year) %>%
+  summarise(
+    bias2    = mean(bias2,    na.rm = TRUE),
+    variance = mean(variance, na.rm = TRUE),
+    mse      = mean(mse,      na.rm = TRUE),
+    .groups  = "drop"
+  ) %>%
+  pivot_longer(cols = c(mse, bias2, variance)) %>%
+  mutate(name = factor(name, levels = c("mse", "bias2", "variance")),
+         modelo = factor(modelo,
+                    levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  )
+
+labelsfacet2 <- c("mse" = "MSE", "bias2" = "Bias^2", "variance" = "Variance")
+
+mse_edu <-
+  ggplot(mse_area_long,
+         aes(x = as.character(year), y = log(value), color = modelo, shape = modelo)) +
+  geom_point(alpha = 0.1) +
+  geom_point(data = mse_area_year,
+             aes(x = as.character(year), y = log(value)),
+             size = 3, alpha = 0.9) +
+  scale_color_lancet() +
+  scale_shape_manual(values = rep(c(16,17,15,18,8,3), length.out = 5)) +
+  scale_x_discrete(breaks = seq(2010, 2020, by = 2)) +
+  labs(x = "Year", y = "log(value)", color = "Model", shape = "Model") +
+  facet_wrap(~name, labeller = labeller(name = labelsfacet2, .default = label_parsed)) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank(),
+        axis.title  = element_text(face = "bold"),
+        strip.text  = element_text(face = "bold", size = 12),
+        axis.text   = element_text(size = 12),
+        legend.position = "bottom")
+
+mse_edu
+```
+
+# Cross validation
+
+```{r}
+data.cpo_edu <-
+  tibble(
+    model = c("Me-1","Me-2","Me-3","Me-4"),
+    CPO   = c(cpo_spde_edu, cpo_spde_hier_edu, cpo_spde_pc1_edu, cpo_spde_pc12_edu),
+    var   = "Elementary education"
+  ) %>%
+  arrange(CPO)
+
+data.cpo_edu %>%
+  gt() %>%
+  tab_header(title = md("LOO-CV (-2 log CPO)"))
+```
+
+```{r}
+cpo_fig_edu <-
+  data.cpo_edu %>%
+  mutate(
+    base  = min(CPO) - 1,
+    #model = factor(model, levels = model_labels),
+    
+    modelo = factor(model,
+                    levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  ) %>%
+  ggplot(aes(x = model, y = CPO)) +
+  geom_segment(aes(x = model, xend = model, y = base, yend = CPO),col = "red4") +
+  geom_point(size = 3, col = "red4") +
+  labs(x = "Model", y = "-2 log(CPO)") +
+  theme_minimal() +
+  theme(axis.title = element_text(face = "bold"),
+        axis.text  = element_text(size = 12)) +
+  coord_flip()
+```
+
+
+```{r}
+plot_grid(mse_edu, cpo_fig_edu,
+          ncol = 1, labels = c("A", "B"),
+          rel_heights = c(1, 0.6))
+```
+
+# Maps
+
+```{r}
+map_edu <- distritos %>% left_join(pred_all_edu, by = "ubigeo")
+```
+
+## Uncertainty (CI width) — 2020
+
+```{r, fig.width=14, fig.height=4}
+ggplot(map_edu %>% filter(year == 2020)) +
+  geom_sf(aes(fill = ci_width), color = "white", linewidth = 0.2) +
+  facet_wrap(~model, nrow = 1) +
+  scale_fill_viridis_c(option = "inferno", direction = -1,
+                       name = "CI width", na.value = "grey80") +
+  labs(title = "Uncertainty (95% CI width) — EDU, 2020") +
+  theme_void() +
+  theme(strip.text = element_text(size = 8, face = "bold"))
+```
+
+# Pointrange
+
+```{r}
+years_plot_edu <- c(2010,2012, 2014, 2016,2018,2020)
+
+direct_edu_plot_yr <- wi_edu %>%
+  filter(!is.na(hv109_recat)) %>%
+  group_by(ubigeo, year) %>%
+  summarise(direct = weighted.mean(hv109_recat, hv005, na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(year %in% years_plot_edu) %>%
+  left_join(dist_names, by = "ubigeo")
+
+sampled_edu_yr <- cluster_edu %>% distinct(ubigeo, year) %>%
+  mutate(sampled_yr = TRUE)
+
+order_edu <- pred_spde_pc1_edu %>%
+  filter(year == 2020) %>% arrange(median) %>% pull(ubigeo)
+
+pr_edu <- pred_all_edu %>%
+  filter(year %in% years_plot_edu) %>%
+  left_join(dist_names,     by = "ubigeo") %>%
+  left_join(sampled_edu_yr, by = c("ubigeo", "year")) %>%
+  mutate(
+    sampled_yr = replace_na(sampled_yr, FALSE),
+    distr      = factor(distr,
+                        levels = dist_names$distr[match(order_edu, dist_names$ubigeo)]),
+    model      = factor(model, levels = c("m1","m2","m3","m4"))
+  )
+
+direct_edu_plot_yr <- direct_edu_plot_yr %>%
+  mutate(distr = factor(distr,
+                        levels = dist_names$distr[match(order_edu, dist_names$ubigeo)]))
+```
+
+
+```{r}
+estimate_prop_edu <-
+  ggplot(pr_edu %>% filter(model%in%c("m3")),
+       aes(x = median, y = ubigeo, color = model)) +
+
+  geom_pointrange(aes(xmin = lower, xmax = upper, color = "Predicted value"),
+                  position  = position_dodge(width = 0.9),
+                  linewidth = 1.5, alpha = .5) +
+
+  geom_point(data = direct_edu_plot_yr, aes(x = direct, y = ubigeo, color = "Direct estimate" ),
+             inherit.aes = FALSE, alpha = .5, size = 2) +
+
+  scale_alpha_manual(values = c("TRUE" = 1.0, "FALSE" = 0.35),
+                     labels = c("TRUE" = "Sampled", "FALSE" = "Not sampled"),
+                     name = "Sampled\nthat year") +
+
+  scale_color_manual(
+    values = c(
+      "Predicted value" = "blue4",
+      "Direct estimate" = "red4"
+    )
+  ) +
+  labs(x = "Proportion") +
+
+  facet_wrap(~year, nrow = 3) +
+
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    #axis.text.x = element_text(angle = 90),
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank() 
+  ) +
+  coord_flip()
+
+estimate_prop_edu
+```
+
+
+
+```{r}
+dir.create("./data/models", showWarnings = FALSE, recursive = TRUE)
+
+pred_all_edu <- bind_rows(
+  pred_spde_edu, pred_spde_hier_edu,
+  pred_spde_pc1_edu, pred_spde_pc12_edu
+)
+
+dir.create("./data/models", showWarnings = FALSE, recursive = TRUE)
+
+saveRDS(pred_all_edu, "./data/models/edu_preds.rds")
+
+# Save m3 (SPDE+pc1) predictions — model Me-3
+write.csv(pred_spde_pc1_edu, "./data/final_data/edu_pred_m3_pc1.csv", row.names = FALSE)
+```
+
+```{r}
+# sup_result_fig2a — scatter + heatmap, todos los años
+sup2a_heat_data <-
+  bind_rows(tbl.yrd.full_year, tbl.yrd.full) %>%
+  mutate(year2 = ifelse(is.na(year), "T. model", year)) %>%
+  filter(.metric != "mase") %>%
+  mutate(
+    labels = round(.estimate, 3),
+    legend_title = .metric,
+    modelo = factor(modelo, levels = c("m1","m2","m3","m4"),
+                    labels = c("Me-1","Me-2","Me-3","Me-4"))
+  ) %>%
+  group_by(.metric) %>%
+  nest() %>%
+  mutate(grafico = map(.x = data, .f = ~ggplot(.x) +
+    geom_tile(aes(x = modelo, y = as.factor(year2), fill = .estimate), alpha = .8, show.legend = F) +
+    geom_text(aes(x = modelo, y = as.factor(year2), label = labels), size = 3) +
+    scale_fill_tw3("blue") +
+    labs(fill = NULL, y = NULL, x = .x$legend_title) +
+    theme_minimal() + scale_x_discrete(position = "top") +
+    theme(axis.title.x = element_text(face = "bold"),
+          axis.text = element_text(face = "bold", size = 9),
+          strip.text = element_text(face = "bold"))))
+
+cowplot::plot_grid(
+  fitted_vals %>%
+    mutate(modelo = factor(modelo, levels = c("m1","m2","m3","m4"),
+                           labels = c("Me-1","Me-2","Me-3","Me-4"))) %>%
+    ggplot(aes(x = estimacion_real, y = median, color = modelo)) +
+    geom_point(alpha = 0.5, size = 2, show.legend = F) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray40") +
+    scale_color_lancet() + facet_grid(year~modelo) +
+    labs(x = "Prop.% (Direct estimate)", y = "Prop.% (Predicted)") +
+    theme_minimal() +
+    theme(axis.title = element_text(face = "bold"),
+          axis.text = element_text(face = "bold"),
+          strip.text = element_text(face = "bold")),
+  cowplot::plot_grid(plotlist = sup2a_heat_data$grafico, nrow = 1),
+  cols = 1, rel_heights = c(.7, .3)
+)
+
+ggsave("./figures/sup_result_fig2a.pdf", dpi = 800, bg = "white", width = 18, height = 12)
+```
+
+```{r}
+# sup_result_fig5a — pointrange, todos los años
+direct_edu_all <- wi_edu %>%
+  filter(!is.na(hv109_recat)) %>%
+  group_by(ubigeo, year) %>%
+  summarise(direct = weighted.mean(hv109_recat, hv005, na.rm = TRUE), .groups = "drop")
+
+ggplot(pred_all_edu %>% filter(model == "m3"), aes(x = median, y = ubigeo)) +
+  geom_pointrange(aes(xmin = lower, xmax = upper, color = "Predicted value"),
+                  linewidth = 1.5, alpha = .5) +
+  geom_point(data = direct_edu_all, aes(x = direct, y = ubigeo, color = "Direct estimate"),
+             inherit.aes = FALSE, alpha = .5, size = 2) +
+  scale_color_manual(values = c("Predicted value" = "blue4", "Direct estimate" = "red4"), name = "") +
+  facet_wrap(~year, ncol = 3) +
+  theme_classic() +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) +
+  coord_flip()
+
+ggsave("./figures/sup_result_fig5a.pdf", dpi = 800, bg = "white", width = 20, height = 15)
+```
+
+```{r}
+
+```
+
