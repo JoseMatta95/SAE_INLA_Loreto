@@ -1,4 +1,4 @@
-# SAE_INLA_Loreto — Small area estimation of education and poverty in Loreto, Peru (2010–2020)
+# Mapping subnational socioeconomic indicators and malaria risk in highly dispersed regions using small area estimation: a retrospective ecological cohort study
 
 ## Study description
 
