@@ -99,7 +99,7 @@ wi_edu_2016_2019<-
 # for example, housing module in 2019 was 64, but now it is 1629
 
 wi_edu_2020<-
-  map_df(.x = c(2020:2021),
+  map_df(.x = c(2020,2021),
          .f = ~consulta_endes2(periodo = .x,
                                codigo_modulo = 1629,
                                base = 'RECH1',
@@ -160,7 +160,11 @@ wi_edu_2020<-
     
     hv270_recat = ifelse(hv270 == "1st" | hv270 == "2nd",1,0), # at least 3rd WI
     
-    hv025 = ifelse(hv025 == 1,0,1)
+    hv025 = ifelse(hv025 == 1,0,1),
+    
+    long = longitudx,
+    lat = latitudy
+    
   ) %>% 
   zap_labels()
 
@@ -191,7 +195,7 @@ wi_edu_2010_2020<-
 
 write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020) & hv023 == 16),"./data/wi_edu_2010_2020.csv", row.names = F)
 write.csv(wi_edu_2010_2020 %>% filter(year%in%c(2010:2020)),"./data/wi_edu_2010_2020_nacional.csv", row.names = F)
-write.csv(wi_edu_2010_2020,"./data/aux_data/_other/wi_edu_2009_2021.csv", row.names = F)
+
 
 # 2. CENSOS----
 

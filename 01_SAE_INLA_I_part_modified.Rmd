@@ -55,6 +55,8 @@ censo_pca_20 <- read.csv("./data/censo_2017/censo_2017_pca_20.csv") %>% mutate(u
 # 3. Direct estimations with ENDES
 
 ```{r}
+
+options(survey.lonely.psu = "adjust")
 data_final_nest<-
   wi_edu_2010_2020 %>% 
   mutate(

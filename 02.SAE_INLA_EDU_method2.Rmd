@@ -468,6 +468,7 @@ figura2_a<-
         axis.text = element_text(face = "bold"),
         strip.text = element_text(face ="bold"),
         legend.title = element_text(face = "bold"))
+figura2_a
 ```
 ## Heatplot accuracy metrics by year
 
@@ -662,7 +663,7 @@ direct_edu_plot_yr <- wi_edu %>%
   group_by(ubigeo, year) %>%
   summarise(direct = weighted.mean(hv109_recat, hv005, na.rm = TRUE),
             .groups = "drop") %>%
-  filter(year %in% years_plot_edu) %>%
+  #filter(year %in% years_plot_edu) %>%
   left_join(dist_names, by = "ubigeo")
 
 sampled_edu_yr <- cluster_edu %>% distinct(ubigeo, year) %>%
@@ -672,7 +673,7 @@ order_edu <- pred_spde_pc1_edu %>%
   filter(year == 2020) %>% arrange(median) %>% pull(ubigeo)
 
 pr_edu <- pred_all_edu %>%
-  filter(year %in% years_plot_edu) %>%
+  #filter(year %in% years_plot_edu) %>%
   left_join(dist_names,     by = "ubigeo") %>%
   left_join(sampled_edu_yr, by = c("ubigeo", "year")) %>%
   mutate(

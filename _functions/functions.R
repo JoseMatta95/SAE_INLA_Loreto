@@ -3,24 +3,22 @@
 
 consulta_endes2 <- function(periodo, codigo_modulo, base, guardar = FALSE, ruta = "", codificacion=NULL) {
   temp <- tempfile() ; tempdir <- tempdir()
-
-  versiones <- matrix(c(2024,968,2023,910,2022,786,2021,760,2020, 739,
+  versiones <- matrix(c(2025,1038,2024,968,2023,910,2022,786,2021,760,2020, 739,
                         2019, 691,
                         2018, 638, 2017,605,2016,548,2015,504,2014,441,
                         2013,407,2012,323,2011,290,2010,260,
                         2009,238,2008,209,2007,194,2006,183,
                         2005,150,2004,120),byrow = T,ncol = 2)
-
   codigo_encuesta <- versiones[versiones[,1] == periodo,2]
   ruta_base <- "https://proyectos.inei.gob.pe/iinei/srienaho/descarga/SPSS/"
   modulo <- paste("-modulo",codigo_modulo,".zip",sep = "")
   url <- paste(ruta_base,codigo_encuesta,modulo,sep = "")
-
   utils::download.file(url,temp)
-
   archivos <- utils::unzip(temp,list = T)
-  archivos <- archivos[stringr::str_detect(archivos$Name, paste0(base,"\\.")) == TRUE,]
-
+  
+  base_buscar <- if (periodo >= 2023) paste0(base, "_", periodo) else base
+  
+  archivos <- archivos[stringr::str_detect(archivos$Name, paste0(base_buscar,"\\.")) == TRUE,]
   if(guardar == TRUE) {
     utils::unzip(temp, files = archivos$Name, exdir = paste(getwd(), "/", ruta, sep = ""))
     print(paste("Archivos descargados en: ", getwd(), "/", ruta, sep = ""))
