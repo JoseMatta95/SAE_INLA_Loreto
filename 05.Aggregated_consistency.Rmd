@@ -126,6 +126,7 @@ plot_edu <-
   scale_fill_manual(values  = c("Direct estimate" = "red4",
                                 "Predicted value"  = "blue4"), name = NULL) +
   scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)) +
+  scale_y_continuous(breaks = seq(.69, .85, 0.04), limits = c(.69,.85)) +  
   labs(x = "Year", y = "Proportion") +
   facet_wrap(~modelo, labeller = labeller(modelo = edu_labels)) +
   theme_minimal() +
@@ -220,7 +221,7 @@ plot_wi
 
 # Combined figure
 
-```{r, fig.width=14, fig.height=9}
+```{r}
 g_edu  <- plot_edu + theme(legend.position = "none")
 g_wi   <- plot_wi  + theme(legend.position = "none")
 legend <- get_legend2(plot_edu)
@@ -229,7 +230,7 @@ plot_grid(g_edu, g_wi, legend,
           ncol = 1, rel_heights = c(0.9, 0.9, 0.05),
           labels = c("a", "b", ""))
 
-ggsave("./figures/fig4.pdf", dpi = 800, bg = "white", width = 14, height = 9)
+ggsave("./figures/fig4.png", dpi = 300, bg = "white", width = 14, height = 9)
 ```
 
 ```{r}

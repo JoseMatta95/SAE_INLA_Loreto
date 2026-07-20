@@ -332,7 +332,7 @@ pca2<-ggplot(df_scree %>% filter(PC %in% c(1:15)), aes(x = PC, y = VarExp)) +
   theme_bw()
 
 cowplot::plot_grid(pca1,pca2, labels = c("a","b"))
-ggsave("./figures/sm_fig3.pdf", dpi = 800, bg = "white", width = 18, height = 9)
+ggsave("./figures/sm_fig3.png", dpi = 300, bg = "white", width = 18, height = 9)
 ## devolviendo id y agregando outcome
 
 censo_pca_20<-

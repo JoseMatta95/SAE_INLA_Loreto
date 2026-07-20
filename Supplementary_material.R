@@ -104,7 +104,7 @@ plot_grid(ggdraw() +
           labels = c("a","","b"))
 
 ##### sm fig 1 ----
-ggsave("./figures/sm_fig1.pdf", dpi = 800, bg = "white", height = 7, width = 12)
+ggsave("./figures/sm_fig1.png", dpi = 300, bg = "white", height = 7, width = 12)
 
 ### Loreto urbanization
 
@@ -200,7 +200,7 @@ plot_grid(
   plot_grid(g2,g3, labels = c("b","c")),
   nrow = 2)
 
-ggsave("./figures/sm_fig2.pdf", dpi = 800, bg = "white", 
+ggsave("./figures/sm_fig2.png", dpi = 300, bg = "white", 
        height = 6, width = 9)
 
 ## 2. Supplementary methods ----
@@ -252,7 +252,7 @@ b<-  distritos_sf_predict_prop %>%
 
 plot_grid(a,b, ncol = 1, rel_heights = c(.8,.9))
 
-ggsave("./figures/sm_fig4.pdf", dpi = 800,bg = "white", width = 8)
+ggsave("./figures/sm_fig4.png", dpi = 300,bg = "white", width = 8)
 
 ##### sm fig 5 ----
 
@@ -295,6 +295,6 @@ b<-
 
 plot_grid(a,b, ncol = 1, rel_heights = c(.8,.9))
 
-ggsave("./figures/sm_fig5.pdf", dpi = 800,bg = "white", width = 8)
+ggsave("./figures/sm_fig5.png", dpi = 300,bg = "white", width = 8)
 
 

@@ -145,7 +145,7 @@ ggdraw() +
              width = 0.1, height = 0.1)
 
 peru_loreto
-#ggsave("./figures/sup_result_fig1.png", dpi = 800, bg = "white", height = 10, width = 14)
+#ggsave("./figures/sup_result_fig1.png", dpi = 300, bg = "white", height = 10, width = 14)
 ```
 
 
@@ -237,9 +237,9 @@ scale_fill_gradientn(
     plot.margin = unit(c(1, 0, 0, 0), "cm")
   )
 malaria_maps
-#ggsave("./figures/test2.png", dpi = 800, bg = "white", width = 10)
+#ggsave("./figures/test2.png", dpi = 300, bg = "white", width = 10)
 
-ggsave("./figures/sup_result_fig1b.pdf", dpi = 800, bg = "white", width = 10)
+ggsave("./figures/sup_result_fig1b.png", dpi = 300, bg = "white", width = 10)
 ```
 
 ```{r}
@@ -254,7 +254,7 @@ plot_grid(plot_grid(peru_loreto,
 ```
 
 ```{r}
-  ggsave("./figures/fig1.pdf", dpi = 800, bg = "white", width = 14, height= 6)
+  ggsave("./figures/fig1.png", dpi = 300, bg = "white", width = 14, height= 6)
 ```
 
 # INDICE RIQUEZA -----
@@ -467,7 +467,7 @@ plot_grid(
   
   lisa_wi, nrow = 2, labels = c("a","b"))
 
-ggsave("./figures/fig7.pdf", dpi = 800, bg = "white", width = 12, height = 7)
+ggsave("./figures/fig7.png", dpi = 300, bg = "white", width = 12, height = 7)
 ```
 
 # EDUCACION -----
@@ -675,7 +675,7 @@ plot_grid(
   
   lisa_edu, nrow = 2, labels = c("a","b"))
 
-ggsave("./figures/fig6.pdf", dpi = 800, bg = "white", width = 12, height = 7)
+ggsave("./figures/fig6.png", dpi = 300, bg = "white", width = 12, height = 7)
 ```
 
 ```{r}
@@ -696,7 +696,7 @@ df %>%
   facet_wrap(~year, ncol = 4) +
   coord_flip()
 
-#ggsave("./figures/sup_result_fig1.pdf", dpi = 800, bg = "white", height = 12, width = 14)
+#ggsave("./figures/sup_result_fig1.png", dpi = 300, bg = "white", height = 12, width = 14)
 ```
 
 ```{r}
@@ -715,7 +715,7 @@ malaria_dist_total %>%
   theme_void() +
   theme(legend.position = "bottom", legend.title = element_text(face = "bold"))
 
-ggsave("./figures/sup_result_fig2.pdf", dpi = 800, bg = "white", width = 14, height = 6)
+ggsave("./figures/sup_result_fig2.png", dpi = 300, bg = "white", width = 14, height = 6)
 ```
 
 ```{r}
@@ -748,7 +748,7 @@ lisa_sup6 <-
 plot_grid(plot_grid(legend_sup6, map_sup6, nrow = 2, rel_heights = c(.3, 1)),
           lisa_sup6, nrow = 2, labels = c("a", "b"))
 
-ggsave("./figures/sup_result_fig6.pdf", dpi = 800, bg = "white", width = 14, height = 14)
+ggsave("./figures/sup_result_fig6.png", dpi = 300, bg = "white", width = 14, height = 14)
 ```
 
 ```{r}
@@ -783,7 +783,7 @@ lisa_sup7 <-
 plot_grid(plot_grid(legend_sup7, map_sup7, nrow = 2, rel_heights = c(.3, 1)),
           lisa_sup7, nrow = 2, labels = c("a", "b"))
 
-ggsave("./figures/sup_result_fig7.pdf", dpi = 800, bg = "white", width = 14, height = 14)
+ggsave("./figures/sup_result_fig7.png", dpi = 300, bg = "white", width = 14, height = 14)
 ```
 
 

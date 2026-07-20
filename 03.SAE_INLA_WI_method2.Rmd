@@ -384,7 +384,7 @@ figura2_parte2 <- cowplot::plot_grid(figura2_c,figura2_d,
 ```{r}
 plot_grid(figure2_parte1,figura2_parte2, ncol = 1, labels = c("a","b"))
 
-ggsave("./figures/fig2.pdf", dpi = 800, height = 13.5, width = 10, bg = "white")
+ggsave("./figures/fig2.png", dpi = 300, height = 13.5, width = 10, bg = "white")
 
 ```
 
@@ -523,7 +523,7 @@ labels = c("a","b","c"),
 rel_heights = c(1,1,.7)
 )
 
-ggsave("./figures/fig3.pdf", dpi = 800, bg = "white", height = 11, width = 11)
+ggsave("./figures/fig3.png", dpi = 300, bg = "white", height = 11, width = 11)
 ```
 
 ### Pointrange
@@ -651,7 +651,7 @@ plot_grid(estimate_prop_edu + theme(legend.position = "none"),
           estimate_prop_wi2 + theme(legend.position = "top"),
           cols = 1, labels = c("a", "b"), rel_heights = c(.85, 1))
 
-ggsave("./figures/fig5.pdf", dpi = 800, bg = "white", width = 16, height = 18)
+ggsave("./figures/fig5.png", dpi = 300, bg = "white", width = 16, height = 18)
 ```
 
 # Maps
@@ -727,7 +727,7 @@ cowplot::plot_grid(
   cols = 1, rel_heights = c(.7, .3)
 )
 
-ggsave("./figures/sup_result_fig2b.pdf", dpi = 800, bg = "white", width = 18, height = 12)
+ggsave("./figures/sup_result_fig2b.png", dpi = 300, bg = "white", width = 18, height = 12)
 ```
 
 ```{r}
@@ -749,7 +749,7 @@ ggplot(pred_all_wi %>% filter(model == "m3"), aes(x = median, y = ubigeo)) +
         axis.text.x = element_text(angle = 90)) +
   coord_flip()
 
-ggsave("./figures/sup_result_fig5b.pdf", dpi = 800, bg = "white", width = 20, height = 15)
+ggsave("./figures/sup_result_fig5b.png", dpi = 300, bg = "white", width = 20, height = 15)
 ```
 
 ```{r}
