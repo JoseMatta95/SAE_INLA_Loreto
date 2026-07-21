@@ -7,7 +7,6 @@ date: "2025-06-06"
 ```{r, message=F, warning=F}
 library(tidyverse)
 library(sf)
-library(sf)
 library(biscale)
 library(janitor)
 library(innovar)
@@ -680,7 +679,7 @@ ggsave("./figures/fig6.png", dpi = 300, bg = "white", width = 12, height = 7)
 
 ```{r}
 # sup_result_fig1 — estimaciones directas ambos indicadores, todos los años
-df %>%
+df_final %>%
   dplyr::mutate(lowic = estimate - 1.96*se, uppwic = estimate + 1.96*se,
          ubigeo = as.character(ubigeo)) %>%
   ggplot(aes(y = estimate, x = ubigeo)) +
@@ -784,10 +783,5 @@ plot_grid(plot_grid(legend_sup7, map_sup7, nrow = 2, rel_heights = c(.3, 1)),
           lisa_sup7, nrow = 2, labels = c("a", "b"))
 
 ggsave("./figures/sup_result_fig7.png", dpi = 300, bg = "white", width = 14, height = 14)
-```
-
-
-```{r}
-
 ```
 

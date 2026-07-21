@@ -415,16 +415,11 @@ fitted_vals <- pred_all_edu %>%
 ```
 
 ```{r}
-perform.metrics      <- yardstick::metric_set(mae, mase,smape, rmse)
-perform.metrics.dist <- yardstick::metric_set(mae, smape, rmse)
+perform.metrics <- yardstick::metric_set(mae, mase, smape, rmse)
 
 tbl.yrd.full <- fitted_vals %>%
   group_by(modelo) %>%
   perform.metrics(truth = estimacion_real, estimate = fit)
-
-tbl.yrd.dist_prop <- fitted_vals %>%
-  group_by(modelo, ubigeo) %>%
-  perform.metrics.dist(truth = estimacion_real, estimate = fit)
 
 tbl.yrd.full_year <- fitted_vals %>%
   group_by(modelo, year) %>%
@@ -730,13 +725,6 @@ estimate_prop_edu
 
 
 ```{r}
-dir.create("./data/models", showWarnings = FALSE, recursive = TRUE)
-
-pred_all_edu <- bind_rows(
-  pred_spde_edu, pred_spde_hier_edu,
-  pred_spde_pc1_edu, pred_spde_pc12_edu
-)
-
 dir.create("./data/models", showWarnings = FALSE, recursive = TRUE)
 
 saveRDS(pred_all_edu, "./data/models/edu_preds.rds")

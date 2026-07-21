@@ -178,12 +178,12 @@ formula_bb_m2 <- y ~ 1 +
     hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
   f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
 
-formula_bb_m3 <- y ~ 1 + pc1 + pc2 +
+formula_bb_m3 <- y ~ 1 + pc1 +
   f(id.sp,   model = "bym2", graph = inla_graph,
     scale.model = TRUE, hyper = pc_bym2) +
   f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
 
-formula_bb_m4 <- y ~ 1 + pc1 +
+formula_bb_m4 <- y ~ 1 + pc1 + pc2 +
   f(id.sp,   model = "bym2", graph = inla_graph,
     scale.model = TRUE, hyper = pc_bym2) +
   f(id.time, model = "rw2", scale.model = TRUE, hyper = pc_prec)
@@ -202,14 +202,14 @@ res_bb_m1 <- fit_bb(cluster_wi, pred_grid_wi, formula_bb_m1, "m1")
 res_bb_m2 <- fit_bb(cluster_wi, pred_grid_wi, formula_bb_m2, "m2")
 ```
 
-## M3: BYM2 + RW2 + pc1 + pc2
+## M3: BYM2 + RW2 + pc1
 
 ```{r}
 res_bb_m3 <- fit_bb(cluster_wi_pca, pred_grid_pca, formula_bb_m3, "m3")
 ```
 
 
-## M4: BYM2 + RW2 + pc1
+## M4: BYM2 + RW2 + pc1 + pc2
 
 ```{r}
 res_bb_m4 <- fit_bb(cluster_wi_pca, pred_grid_pca, formula_bb_m4, "m4")
@@ -267,16 +267,11 @@ fitted_vals <- pred_all_wi %>%
 ```
 
 ```{r}
-perform.metrics      <- yardstick::metric_set(mae,mase,smape,rmse)
-perform.metrics.dist <- yardstick::metric_set(mae, smape, rmse)
+perform.metrics <- yardstick::metric_set(mae, mase, smape, rmse)
 
 tbl.yrd.full <- fitted_vals %>%
   group_by(modelo) %>%
   perform.metrics(truth = estimacion_real, estimate = fit)
-
-tbl.yrd.dist <- fitted_vals %>%
-  group_by(modelo, ubigeo) %>%
-  perform.metrics.dist(truth = estimacion_real, estimate = fit)
 
 tbl.yrd.year <- fitted_vals %>%
   group_by(modelo, year) %>%
@@ -451,12 +446,6 @@ mse_wi <-
 
 mse_wi
 ```
-```{r}
-mse_wi
-mse_edu
-
-mse_fig<-plot_grid(mse_edu,mse_wi, ncol = 1, labels = c("a","b"))
-```
 
 ### Cross validation
 
@@ -563,57 +552,6 @@ direct_wi_plot <- direct_wi_plot %>%
 
 
 ```{r}
-estimate_prop_wi<-
-  fitted_vals %>%
-  filter(modelo == "m3") %>%
-  filter(year %in%c(2010,2012,2014,2016,2018,2020)) %>%
-ggplot() +
-
-   geom_pointrange(
-    aes(
-      ymin = lower,
-      ymax = upper,
-      y = median,
-      x = ubigeo,
-      color = "Predicted value"
-    ),
-    linewidth = 1.5,
-    alpha = .5
-  ) +
-
-  geom_point(
-    aes(
-      y = estimacion_real,
-      x = ubigeo,
-      color = "Direct estimate"
-    ),
-    alpha = .5
-  ) +
-
-  scale_color_manual(
-    name = "",
-    values = c(
-      "Predicted value" = "blue4",
-      "Direct estimate" = "red4"
-    )
-  ) +
-
-  labs(
-    y = "Proportion",
-    x = "Ubigeo"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    axis.text = element_text(angle = 90)
-  ) +
-  facet_wrap(~year, ncol = 2, scales = "free_y")
-
-
-estimate_prop_wi
-```
-
-```{r}
 estimate_prop_wi2 <-
   ggplot(pr_wi %>% filter(model %in% c("m4")),
        aes(x = median, y = ubigeo, color = model)) +
@@ -682,7 +620,7 @@ dir.create("./data/models", showWarnings = FALSE, recursive = TRUE)
 
 saveRDS(pred_all_wi, "./data/models/wi_bb_preds.rds")
 
-# Save m4 (BYM2+RW2+pc1) predictions — model Mp-4
+# Save m3 (BYM2 + RW2 + pc1) predictions — model Mp-3
 write.csv(res_bb_m3$pred, "./data/final_data/wi_pred_m3_pc1.csv", row.names = FALSE)
 ```
 

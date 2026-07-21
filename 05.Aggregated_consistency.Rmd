@@ -30,12 +30,6 @@ source("./_functions/functions.R")
 wi_edu <- read.csv("./data/wi_edu_2010_2020.csv")
 ```
 
-# Helper functions
-
-Reconstrucción de η desde el campo latente muestreado (modelos SPDE).
-Para modelos no-SPDE (BYM2/beta-binomial), `Predictor:i` está disponible
-directamente en el campo latente.
-
 # Direct estimates — ENDES
 
 ```{r}
@@ -64,14 +58,14 @@ direct_wi <- data_nest %>%
 
 ```{r}
 edu_model_list <- list(
-  list(fit = fit_spde_edu,      data = cluster_edu,     A_obs = A_obs_edu, label = "m1"),
-  list(fit = fit_spde_hier_edu, data = cluster_edu,     A_obs = A_obs_edu, label = "m2"),
-  list(fit = fit_spde_pc1_edu,  data = cluster_edu_pca, A_obs = A_obs_edu, label = "m3"),
-  list(fit = fit_spde_pc12_edu, data = cluster_edu_pca, A_obs = A_obs_edu, label = "m4")
+  list(fit = fit_spde_edu,      data = cluster_edu,     obs_idx = obs_idx_spde_edu,      label = "m1"),
+  list(fit = fit_spde_hier_edu, data = cluster_edu,     obs_idx = obs_idx_spde_hier_edu, label = "m2"),
+  list(fit = fit_spde_pc1_edu,  data = cluster_edu_pca, obs_idx = obs_idx_spde_pc1_edu,  label = "m3"),
+  list(fit = fit_spde_pc12_edu, data = cluster_edu_pca, obs_idx = obs_idx_spde_pc12_edu, label = "m4")
 )
 
 predict_edu <- map_dfr(edu_model_list, function(m) {
-  resumen_anual_samples(m$fit, m$data, spde = TRUE, A_obs = m$A_obs) %>%
+  resumen_anual_samples(m$fit, m$data, obs_idx = m$obs_idx) %>%
     mutate(modelo = m$label)
 })
 ```
@@ -103,6 +97,26 @@ validation_edu %>%
 
 ## Plot
 
+Escalas y tema compartidos por ambas figuras de consistencia.
+
+```{r}
+consistency_layers <- list(
+  scale_color_manual(values = c("Direct estimate" = "red4",
+                                "Predicted value"  = "blue4"), name = NULL),
+  scale_fill_manual(values  = c("Direct estimate" = "red4",
+                                "Predicted value"  = "blue4"), name = NULL),
+  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)),
+  labs(x = "Year", y = "Proportion"),
+  theme_minimal(),
+  theme(legend.position    = "bottom",
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_blank(),
+        strip.text         = element_text(face = "bold"),
+        axis.title         = element_text(face = "bold"),
+        axis.text          = element_text(size = 10))
+)
+```
+
 ```{r}
 edu_labels <- c(
   "m1" = "Me-1",
@@ -121,21 +135,9 @@ plot_edu <-
               alpha = 0.25) +
   geom_line(aes(y = hv109_recat, color = "Direct estimate"), linewidth = 1) +
   geom_line(aes(y = media,       color = "Predicted value"), linewidth = 1) +
-  scale_color_manual(values = c("Direct estimate" = "red4",
-                                "Predicted value"  = "blue4"), name = NULL) +
-  scale_fill_manual(values  = c("Direct estimate" = "red4",
-                                "Predicted value"  = "blue4"), name = NULL) +
-  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)) +
-  scale_y_continuous(breaks = seq(.69, .85, 0.04), limits = c(.69,.85)) +  
-  labs(x = "Year", y = "Proportion") +
-  facet_wrap(~modelo, labeller = labeller(modelo = edu_labels)) +
-  theme_minimal() +
-  theme(legend.position    = "bottom",
-        panel.grid.minor   = element_blank(),
-        panel.grid.major.x = element_blank(),
-        strip.text         = element_text(face = "bold"),
-        axis.title         = element_text(face = "bold"),
-        axis.text          = element_text(size = 10))
+  consistency_layers +
+  scale_y_continuous(breaks = seq(.69, .85, 0.04), limits = c(.69, .85)) +
+  facet_wrap(~modelo, labeller = labeller(modelo = edu_labels))
 
 plot_edu
 ```
@@ -151,7 +153,7 @@ wi_model_list <- list(
 )
 
 predict_wi <- map_dfr(wi_model_list, function(m) {
-  resumen_anual_samples(m$fit, m$data, spde = FALSE, obs_idx = m$obs_idx) %>%
+  resumen_anual_samples(m$fit, m$data, obs_idx = m$obs_idx) %>%
     mutate(modelo = m$label)
 })
 ```
@@ -201,20 +203,8 @@ plot_wi <-
               alpha = 0.25) +
   geom_line(aes(y = hv270_recat, color = "Direct estimate"), linewidth = 1) +
   geom_line(aes(y = media,       color = "Predicted value"), linewidth = 1) +
-  scale_color_manual(values = c("Direct estimate" = "red4",
-                                "Predicted value"  = "blue4"), name = NULL) +
-  scale_fill_manual(values  = c("Direct estimate" = "red4",
-                                "Predicted value"  = "blue4"), name = NULL) +
-  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)) +
-  labs(x = "Year", y = "Proportion") +
-  facet_wrap(~modelo, labeller = labeller(modelo = wi_labels)) +
-  theme_minimal() +
-  theme(legend.position    = "bottom",
-        panel.grid.minor   = element_blank(),
-        panel.grid.major.x = element_blank(),
-        strip.text         = element_text(face = "bold"),
-        axis.title         = element_text(face = "bold"),
-        axis.text          = element_text(size = 10))
+  consistency_layers +
+  facet_wrap(~modelo, labeller = labeller(modelo = wi_labels))
 
 plot_wi
 ```
@@ -231,9 +221,5 @@ plot_grid(g_edu, g_wi, legend,
           labels = c("a", "b", ""))
 
 ggsave("./figures/fig4.png", dpi = 300, bg = "white", width = 14, height = 9)
-```
-
-```{r}
-
 ```
 

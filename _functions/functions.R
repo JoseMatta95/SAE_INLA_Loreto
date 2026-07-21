@@ -38,44 +38,9 @@ consulta_endes2 <- function(periodo, codigo_modulo, base, guardar = FALSE, ruta 
   }
 }
 
-# RECONSTRUCT ETA SPDE ----
-
-reconstruir_eta_spde <- function(sample, A_obs, data) {
-
-  latent <- sample$latent
-  nms    <- rownames(latent)
-
-  u_idx <- grep("^i\\.field:", nms)
-  eta   <- as.numeric(A_obs %*% latent[u_idx])
-
-  int_idx <- grep("^intercept:", nms)
-  eta     <- eta + as.numeric(latent[int_idx])
-
-  rw2_idx  <- grep("^id\\.time:", nms)
-  rw2_vals <- as.numeric(latent[rw2_idx])
-  eta      <- eta + rw2_vals[data$id.time]
-
-  prov_idx <- grep("^id\\.prov:", nms)
-  if (length(prov_idx) > 0) {
-    prov_vals <- as.numeric(latent[prov_idx])
-    eta       <- eta + prov_vals[data$id.prov]
-  }
-
-  pc1_idx <- grep("^pc1:", nms)
-  if (length(pc1_idx) > 0)
-    eta <- eta + as.numeric(latent[pc1_idx]) * data$pc1
-
-  pc2_idx <- grep("^pc2:", nms)
-  if (length(pc2_idx) > 0)
-    eta <- eta + as.numeric(latent[pc2_idx]) * data$pc2
-
-  eta
-}
-
 # AGGEGATED MEANS PREDICT ----
 
-resumen_anual_samples <- function(modelo_inla, data, spde,
-                                   A_obs = NULL, obs_idx = NULL,
+resumen_anual_samples <- function(modelo_inla, data, obs_idx,
                                    n_sim = 1000) {
 
   samples <- INLA::inla.posterior.sample(n = n_sim, result = modelo_inla)
@@ -83,12 +48,11 @@ resumen_anual_samples <- function(modelo_inla, data, spde,
 
   prev_matrix <- sapply(samples, function(s) {
 
-    if (spde) {
-      p <- plogis(reconstruir_eta_spde(s, A_obs, data))
-    } else {
-      idx_all <- which(grepl("^Predictor", rownames(s$latent)))
-      p       <- plogis(as.numeric(s$latent[idx_all])[obs_idx])
-    }
+    nms <- rownames(s$latent)
+    
+    pred_rows <- grep("^APredictor", nms)
+    if (length(pred_rows) == 0) pred_rows <- grep("^Predictor", nms)
+    p <- plogis(as.numeric(s$latent[pred_rows])[obs_idx])
 
     vapply(years, function(yr) {
       sel <- data$year == yr
