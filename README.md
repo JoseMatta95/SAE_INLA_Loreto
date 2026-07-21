@@ -22,7 +22,6 @@ This study applies small area estimation (SAE) to produce district-level estimat
     - Fig 4–7: District-level SAE maps and biscale malaria analysis
 3. [_functions](https://github.com/josematta/SAE_INLA_Loreto/tree/main/_functions) — Helper functions
     - `consulta_endes2`: Downloads ENDES microdata modules from INEI (updated from [horaciochacon/ENDES.PE](https://github.com/horaciochacon/ENDES.PE))
-    - `reconstruir_eta_spde`: Reconstructs η from INLA posterior samples for SPDE models
     - `resumen_anual_samples`: Aggregated annual prevalence with 95% credible intervals from posterior samples
     - `get_legend2`: Extracts legend grob from ggplot for composite figures
 4. [00.raw_data_extraction.R](https://github.com/josematta/SAE_INLA_Loreto/blob/main/00.raw_data_extraction.R) — Downloads ENDES microdata and processes 2017 Census raw files
