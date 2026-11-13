@@ -16,18 +16,17 @@ wi_edu_2010_2019<-
   map_df(.x = c(2010:2019),
          .f = ~consulta_endes2(periodo = .x,
                                codigo_modulo = 64,
-                               base = 'RECH1',
-                               guardar = F) %>%
+                               base = 'RECH1') %>%
            left_join(consulta_endes2(periodo = .x,
                                      codigo_modulo = 65,
-                                     base = 'RECH23', guardar = F) %>%
+                                     base = 'RECH23') %>%
                        mutate(
                          year = .x
                        ), by = c("HHID")) %>%
 
            left_join(consulta_endes2(periodo = .x,
                                      codigo_modulo = 64,
-                                     base = 'RECH0', guardar = F ), by = "HHID")%>%
+                                     base = 'RECH0'), by = "HHID")%>%
            select(year,everything())) %>%
 
   clean_names() %>%
@@ -88,18 +87,17 @@ wi_edu_2010_2019<-
 wi_edu_2020<-
   consulta_endes2(periodo = 2020,
                   codigo_modulo = 1629,
-                  base = 'RECH1',
-                  guardar = F) %>%
+                  base = 'RECH1') %>%
   left_join(consulta_endes2(periodo = 2020,
                             codigo_modulo = 1630,
-                            base = 'RECH23', guardar = F) %>%
+                            base = 'RECH23') %>%
               mutate(
                 year = 2020
               ), by = c("HHID")) %>%
 
   left_join(consulta_endes2(periodo = 2020,
                             codigo_modulo = 1629,
-                            base = 'RECH0', guardar = F ), by = "HHID")%>%
+                            base = 'RECH0'), by = "HHID")%>%
   select(year,everything()) %>%
   clean_names() %>%
   select(

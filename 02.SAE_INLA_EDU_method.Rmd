@@ -600,7 +600,8 @@ loo_edu<- imap_dfr(cv_models_edu, ~ loo_district_cv(
 ))
 
 loo_eval_edu<- loo_edu %>%
-  district_mean() %>%
+  group_by(ubigeo, year, model) %>%
+  summarise(mean = sum(w_stratum * mean), .groups = "drop") %>%
   inner_join(edu_censo_final %>% select(ubigeo, year, direct = hv109_recat),
              by = c("ubigeo", "year"))
 ```
