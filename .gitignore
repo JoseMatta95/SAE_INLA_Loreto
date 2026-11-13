@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 .positai
+08.predict_2009_2021.R
+data/models/*.rds
+figures/

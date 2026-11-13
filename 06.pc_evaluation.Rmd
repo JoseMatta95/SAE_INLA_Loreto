@@ -1,0 +1,135 @@
+---
+title: "PC evaluation"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: cosmo
+date: "2026-11-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(INLA)
+library(tidyverse)
+library(gt)
+```
+
+# PCA — Census 2017
+
+```{r}
+censo_2017<- read.csv("./data/censo_2017/01.censo_final_loreto_2017.csv") %>%
+  mutate(ubigeo = as.character(ubigeo))
+
+censo_pca<- read.csv("./data/censo_2017/censo_2017_pca_20.csv") %>%
+  mutate(ubigeo = as.character(ubigeo))
+
+censo_loreto_sinid<- censo_2017 %>% select(-ubigeo, -c3_p1_3, -c3_p1_6)
+
+pca<- prcomp(censo_loreto_sinid, center = TRUE, scale. = TRUE)
+
+cor(pca$x[, 1], censo_pca$pc1[match(censo_2017$ubigeo, censo_pca$ubigeo)])
+```
+
+## Explained variance
+
+```{r}
+tibble(PC = paste0("PC", 1:10),
+       var_exp = pca$sdev[1:10]^2 / sum(pca$sdev^2)) %>%
+  mutate(cum_var = cumsum(var_exp)) %>%
+  gt() %>%
+  tab_header(title = md("**Explained variance — Census 2017 PCA**")) %>%
+  fmt_percent(columns = c(var_exp, cum_var), decimals = 1)
+```
+
+## PC1 loadings
+
+```{r}
+loadings_pc1<- tibble(variable = rownames(pca$rotation),
+                      loading = pca$rotation[, "PC1"]) %>%
+  arrange(desc(abs(loading)))
+
+loadings_pc1 %>%
+  slice_head(n = 20) %>%
+  gt() %>%
+  tab_header(title = md("**PC1 — top 20 loadings (absolute value)**")) %>%
+  fmt_number(columns = loading, decimals = 3)
+```
+
+# Final model fits
+
+```{r}
+edu_fits<- readRDS("./data/models/edu_fits.rds")
+wi_fits<- readRDS("./data/models/wi_bb_fits.rds")
+
+fit_edu<- edu_fits$m3$fit
+fit_wi<- wi_fits$m3$fit
+```
+
+# PC1 coefficient
+
+```{r}
+bind_rows(
+  fit_edu$summary.fixed %>% rownames_to_column("term") %>% mutate(Indicator = "EDU"),
+  fit_wi$summary.fixed %>% rownames_to_column("term") %>% mutate(Indicator = "WI")
+) %>%
+  filter(term == "pc1") %>%
+  transmute(Indicator, mean, sd,
+            lower = `0.025quant`, median = `0.5quant`, upper = `0.975quant`) %>%
+  gt() %>%
+  tab_header(title = md("**Posterior summary of the PC1 coefficient (m3)**")) %>%
+  fmt_number(columns = -Indicator, decimals = 3)
+```
+
+# Rural coefficient (EDU)
+
+```{r}
+fit_edu$summary.fixed %>%
+  rownames_to_column("term") %>%
+  filter(term == "rural") %>%
+  transmute(mean, sd,
+            lower = `0.025quant`, 
+            median = `0.5quant`, 
+            upper = `0.975quant`) %>%
+  gt() %>%
+  tab_header(title = md("**Posterior summary of the rural coefficient — EDU (m3)**")) %>%
+  fmt_number(columns = everything(), decimals = 3)
+```
+
+# Hyperparameters
+
+## EDU
+
+```{r}
+fit_edu$summary.hyperpar %>%
+  rownames_to_column("parameter") %>%
+  mutate(prec = str_starts(parameter, "Precision"),
+         median = if_else(prec, 1/sqrt(`0.5quant`), `0.5quant`),
+         lower = if_else(prec, 1/sqrt(`0.975quant`), `0.025quant`),
+         upper = if_else(prec, 1/sqrt(`0.025quant`), `0.975quant`),
+         parameter = str_replace(parameter, "Precision", "SD")) %>%
+  select(parameter, median, lower, upper) %>%
+  gt() %>%
+  tab_header(title = md("**Hyperparameters — EDU (m3)**")) %>%
+  fmt_number(columns = -parameter, decimals = 3)
+```
+
+## WI
+
+```{r}
+fit_wi$summary.hyperpar %>%
+  rownames_to_column("parameter") %>%
+  mutate(prec = str_starts(parameter, "Precision"),
+         median = if_else(prec, 1/sqrt(`0.5quant`), `0.5quant`),
+         lower = if_else(prec, 1/sqrt(`0.975quant`), `0.025quant`),
+         upper = if_else(prec, 1/sqrt(`0.025quant`), `0.975quant`),
+         parameter = str_replace(parameter, "Precision", "SD")) %>%
+  select(parameter, median, lower, upper) %>%
+  gt() %>%
+  tab_header(title = md("**Hyperparameters — WI (m3)**")) %>%
+  fmt_number(columns = -parameter, decimals = 3)
+```

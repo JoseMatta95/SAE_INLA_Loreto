@@ -25,12 +25,12 @@ This study applies small area estimation (SAE) to produce district-level estimat
     - `resumen_anual_samples`: Aggregated annual prevalence with 95% credible intervals from posterior samples
     - `get_legend2`: Extracts legend grob from ggplot for composite figures
 4. [00.raw_data_extraction.R](https://github.com/josematta/SAE_INLA_Loreto/blob/main/00.raw_data_extraction.R) — Downloads ENDES microdata and processes 2017 Census raw files
-5. [01_SAE_INLA_I_part_modified.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/01_SAE_INLA_I_part_modified.Rmd) — Direct estimates (design-based) and census covariate preparation
-6. [02.SAE_INLA_EDU_method2.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/02.SAE_INLA_EDU_method2.Rmd) — SAE models for education (BYM2 and SPDE, with and without PCA covariates)
-7. [03.SAE_INLA_WI_method2.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/03.SAE_INLA_WI_method2.Rmd) — SAE models for wealth index (binomial and beta-binomial, BYM2 and SPDE)
-8. [05.Aggregated_consistency.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/05.Aggregated_consistency.Rmd) — Aggregated consistency check against ENDES direct estimates
-9. [06.biscale_malaria.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/06.biscale_malaria.Rmd) — Biscale maps combining SAE predictions with malaria incidence
-10. [Supplementary_material.R](https://github.com/josematta/SAE_INLA_Loreto/blob/main/Supplementary_material.R) — Supplementary figures and tables
+5. [01.SAE_INLA_I_part.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/01.SAE_INLA_I_part.Rmd) — Direct estimates (design-based) and census covariate preparation
+6. [02.SAE_INLA_EDU_method.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/02.SAE_INLA_EDU_method.Rmd) — SAE models for education (BYM2 and SPDE, with and without PCA covariates)
+7. [03.SAE_INLA_WI_method.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/03.SAE_INLA_WI_method.Rmd) — SAE models for wealth index (binomial and beta-binomial, BYM2 and SPDE)
+8. [04.Aggregated_consistency.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/04.Aggregated_consistency.Rmd) — Aggregated consistency check against ENDES direct estimates
+9. [05.biscale_malaria.Rmd](https://github.com/josematta/SAE_INLA_Loreto/blob/main/05.biscale_malaria.Rmd) — Biscale maps combining SAE predictions with malaria incidence
+10. [SP_Supplementary_material.R](https://github.com/josematta/SAE_INLA_Loreto/blob/main/SP_Supplementary_material.R) — Supplementary figures and tables
 11. [SAE_INLA_Loreto.Rproj](https://github.com/josematta/SAE_INLA_Loreto/blob/main/SAE_INLA_Loreto.Rproj) — R project file
 12. README.md
 

@@ -1,0 +1,193 @@
+---
+title: "Aggregated consistency check — EDU & WI"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: cosmo
+date: "2026-04-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(INLA)
+library(tidyverse)
+library(survey)
+library(cowplot)
+
+source("./_functions/functions.R")
+```
+
+# Data
+
+```{r}
+wi_edu<- read.csv("./data/wi_edu_2010_2020.csv")
+
+edu_m3<- readRDS("./data/models/edu_fits.rds")$m3
+wi_m3<- readRDS("./data/models/wi_bb_fits.rds")$m3
+
+pop<- read.csv("./data/malaria_deforest_data.csv") %>%
+  transmute(ubigeo = as.character(iddist), year, pop = pop_worldp)
+```
+
+# Direct estimates — ENDES
+
+```{r}
+data_nest<- wi_edu %>%
+  group_by(year) %>%
+  nest() %>%
+  mutate(
+    svy = map(data, ~ svydesign(ids = ~hv001, strata = ~hv022,
+                                weights = ~hv005, data = .x, nest = TRUE)),
+    edu_dep = map(svy, ~ svyby(~hv109_recat, ~hv023, design = .x,
+                               svymean, keep.var = TRUE)),
+    wi_dep = map(svy, ~ svyby(~hv270_recat, ~hv023, design = .x,
+                              svymean, keep.var = TRUE))
+  )
+
+direct_edu<- data_nest %>%
+  select(year, edu_dep) %>% unnest(edu_dep) %>% ungroup() %>%
+  select(year, hv109_recat, se)
+
+direct_wi<- data_nest %>%
+  select(year, wi_dep) %>% unnest(wi_dep) %>% ungroup() %>%
+  select(year, hv270_recat, se)
+```
+
+# Aggregated consistency — EDU
+
+```{r}
+predict_edu<- resumen_anual_samples(edu_m3$fit,
+                                    edu_m3$pred_grid %>%
+                                      left_join(pop, by = c("ubigeo", "year")) %>%
+                                      mutate(pop = pop * w_stratum),
+                                    pred_idx = edu_m3$pred_idx)
+```
+
+```{r}
+validation_edu<- direct_edu %>%
+  full_join(predict_edu, by = "year") %>%
+  mutate(
+    low_direct = hv109_recat - 1.96 * se,
+    upp_direct = hv109_recat + 1.96 * se
+  )
+```
+
+```{r}
+mean(abs(validation_edu$hv109_recat - validation_edu$media))
+```
+
+## Plot
+
+```{r}
+consistency_layers<- list(
+  scale_color_manual(values = c("Direct estimate" = "red4",
+                                "Predicted value" = "blue4"), name = NULL),
+  scale_fill_manual(values = c("Direct estimate" = "red4",
+                               "Predicted value" = "blue4"), name = NULL),
+  scale_x_continuous(breaks = 2010:2020, limits = c(2010, 2020)),
+  labs(x = "Year", y = "Proportion"),
+  theme_minimal(),
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        strip.text = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(size = 10))
+)
+```
+
+```{r}
+plot_edu<-
+  validation_edu %>%
+  ggplot(aes(x = year)) +
+  geom_ribbon(aes(ymin = low_direct, ymax = upp_direct, fill = "Direct estimate"),
+              alpha = 0.25) +
+  geom_ribbon(aes(ymin = li_95, ymax = ls_95, fill = "Predicted value"),
+              alpha = 0.25) +
+  geom_line(aes(y = hv109_recat, color = "Direct estimate"), linewidth = 1) +
+  geom_line(aes(y = media, color = "Predicted value"), linewidth = 1) +
+  consistency_layers
+
+plot_edu
+```
+
+# Aggregated consistency — WI (beta-binomial)
+
+```{r}
+predict_wi<- resumen_anual_samples(wi_m3$fit,
+                                   wi_m3$pred_grid %>%
+                                     left_join(pop, by = c("ubigeo", "year")),
+                                   pred_idx = wi_m3$pred_idx)
+```
+
+```{r}
+validation_wi<- direct_wi %>%
+  full_join(predict_wi, by = "year") %>%
+  mutate(
+    low_direct = hv270_recat - 1.96 * se,
+    upp_direct = hv270_recat + 1.96 * se
+  )
+```
+
+```{r}
+mean(abs(validation_wi$hv270_recat - validation_wi$media))
+```
+
+## Plot
+
+```{r}
+plot_wi<-
+  validation_wi %>%
+  ggplot(aes(x = year)) +
+  geom_ribbon(aes(ymin = low_direct, ymax = upp_direct, fill = "Direct estimate"),
+              alpha = 0.25) +
+  geom_ribbon(aes(ymin = li_95, ymax = ls_95, fill = "Predicted value"),
+              alpha = 0.25) +
+  geom_line(aes(y = hv270_recat, color = "Direct estimate"), linewidth = 1) +
+  geom_line(aes(y = media, color = "Predicted value"), linewidth = 1) +
+  consistency_layers
+
+plot_wi
+```
+
+# Combined figure
+
+```{r}
+g_edu<- plot_edu + theme(legend.position = "none")
+g_wi<- plot_wi + theme(legend.position = "none")
+legend<- get_legend2(plot_edu)
+
+cross_scale_fig<-
+  plot_grid(
+plot_grid(
+  g_edu, g_wi,
+          ncol = 2
+  ),
+
+legend,
+
+ncol = 1, rel_heights = c(1,.1))
+```
+
+```{r}
+plot_grid(
+  mse_fig,
+  cross_scale_fig,
+
+  ncol = 1,
+
+  rel_heights = c(1,0.4),
+
+  labels = c("","c")
+)
+
+ggsave("./figures/main figures/fig3.png", dpi=300, height = 11,
+       width = 10)
+ggsave("./figures/main figures/fig3.pdf", dpi=300, height = 11,
+       width = 10)
+```

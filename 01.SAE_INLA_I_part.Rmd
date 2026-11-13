@@ -8,16 +8,10 @@ date: "2025-05-28"
 knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
 ```
 
-
 ```{r}
 library(tidyverse)
 library(survey)
 ```
-
-This R script obtains the direct estimations (ENDES) for the recategorized
-indicators used downstream:
-- edu: at least completed primary education (`hv109_recat`)
-- wi:  at least in the 3rd wealth level (`hv270_recat`)
 
 # 1. data ENDES from 2010-2020
 ```{r}
@@ -68,7 +62,7 @@ write.csv(edu_censo_final_recat, "./data/edu_censo_final_recat.csv", row.names =
 write.csv(wi_censo_final_recat,  "./data/wi_censo_final_recat.csv",  row.names = F)
 ```
 
-# 4. Save data for descriptive figure (fig1_data.csv, used in 06)
+# 4. Save data for descriptive figure 
 
 ```{r}
 df_final_edu <- map2_df(data_final_nest$edu_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
@@ -87,5 +81,5 @@ df_final <-
   bind_rows(df_final_edu, df_final_wi) %>%
   filter(year %in% c(2010,2012,2014,2016,2018,2020))
 
-write.csv(df_final, "./data/aux_data/fig1_data.csv", row.names = F)
+#write.csv(df_final, "./data/aux_data/fig1_data.csv", row.names = F)
 ```
