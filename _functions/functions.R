@@ -84,8 +84,7 @@ district_samples<- function(modelo_inla, pred_data, pred_idx, label, n_sim = 500
       median = apply(district, 1, median),
       lower = apply(district, 1, quantile, probs = 0.025),
       upper = apply(district, 1, quantile, probs = 0.975),
-      sd = apply(district, 1, sd),
-      ci_width = upper - lower
+      sd = apply(district, 1, sd)
     )
 }
 

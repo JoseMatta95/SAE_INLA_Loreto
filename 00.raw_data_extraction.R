@@ -174,7 +174,7 @@ write.csv(wi_edu_2010_2020 %>% filter(hv023 == 16),"./data/wi_edu_2010_2020.csv"
 # 2. CENSOS----
 
 ## census data 2017 ----
-censo_hogares <- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_HOG.sav",
+censo_hogares<- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_HOG.sav",
                           col_select = c("ubigeo","area",'departamento','distrito',
                                          starts_with('c3_p1'),starts_with("c3_p2"),'c4_p1')) %>%
   filter(departamento == "LORETO") %>%
@@ -191,7 +191,7 @@ censo_hogar_dist<-
     across(.cols = c3_p1_1:c4_p1, .f = ~mean(.x,na.rm = T))
   )
 
-censo_vivienda <- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_VIV.sav",
+censo_vivienda<- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_VIV.sav",
                            col_select = c("ubigeo","area",'departamento','distrito',
                                           starts_with('c2_p'),'t_c4_p1')) %>%
   select(-c2_p2,-c2_p7,-c2_p7a,-c2_p7b,-c2_p7c,-c2_p8,-c2_p9) %>%
@@ -215,7 +215,7 @@ censo_vivienda_dist<-
   ) %>%
   select(-(c2_p1:c2_p10))
 
-censo_poblacion <- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_POB.sav",
+censo_poblacion<- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_POB.sav",
                             col_select = c("ubigeo","area",'departamento','distrito',
                                            starts_with('c5_p8'),'c5_p11','c5_p12',
                                            'c5_p13_niv','c5_p15','c5_p16','c5_p23')) %>%
@@ -261,12 +261,12 @@ write.csv(censo_final_loreto_2017, "./data/censo_2017/01.censo_final_loreto_2017
 
 ### rural share by district (encarea) ----
 
-viv_rural <- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_VIV.sav",
+viv_rural<- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_VIV.sav",
                       col_select = c("ubigeo", "departamento", "encarea", "t_c4_p1")) %>%
   filter(departamento == "LORETO", !is.na(t_c4_p1)) %>%
   zap_labels()
 
-rural_frac_encarea <- viv_rural %>%
+rural_frac_encarea<- viv_rural %>%
   group_by(ubigeo) %>%
   summarise(f_rural = sum(t_c4_p1[encarea == 2]) / sum(t_c4_p1), .groups = "drop")
 
@@ -279,18 +279,18 @@ censo_loreto_sinid<-
   censo_final_loreto_2017 %>%
   select(-ubigeo,-c3_p1_3,-c3_p1_6)
 
-pca <- prcomp(censo_loreto_sinid, center = TRUE, scale. = TRUE)
+pca<- prcomp(censo_loreto_sinid, center = TRUE, scale. = TRUE)
 summary(pca)
-pca1<-fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
+pca1<- fviz_pca_var(pca, col.var = "contrib", repel = TRUE)
 
-var_exp <- pca$sdev^2 / sum(pca$sdev^2)
+var_exp<- pca$sdev^2 / sum(pca$sdev^2)
 
-df_scree <- data.frame(
+df_scree<- data.frame(
   PC = factor(1:length(var_exp)),
   VarExp = var_exp
 )
 
-pca2<-ggplot(df_scree %>% filter(PC %in% c(1:15)), aes(x = PC, y = VarExp)) +
+pca2<- ggplot(df_scree %>% filter(PC %in% c(1:15)), aes(x = PC, y = VarExp)) +
   geom_line(group = 1, color = "steelblue") +
   geom_point(size = 2, color = "steelblue") +
   scale_y_continuous(labels = scales::percent) +

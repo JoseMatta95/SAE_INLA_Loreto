@@ -1,5 +1,3 @@
-# WI m3 without rural (main model) vs. with rural vs. with rural and without pc1
-
 library(INLA)
 library(tidyverse)
 library(gt)
@@ -61,7 +59,7 @@ rerun2_rural<- inla.rerun(rerun1_rural)
 rerun3_rural<- inla.rerun(rerun2_rural)
 rerun4_rural<- inla.rerun(rerun3_rural)
 
-# Hyperparameters
+# Hyperparameters ----
 
 list(fit = fit_bb_m3, rerun1 = rerun1_norural, rerun2 = rerun2_norural,
      rerun3 = rerun3_norural, rerun4 = rerun4_norural) %>%
@@ -95,7 +93,7 @@ list(fit = fit_rural, rerun1 = rerun1_rural, rerun2 = rerun2_rural,
   gt() %>%
   tab_header(title = md("**WI m3 with rural — hyperparameters along the reruns**"))
 
-# With rural vs. main model 
+# With rural vs. main model ----
 
 sampled<- cluster_wi_pca %>%
   distinct(ubigeo, year) %>%

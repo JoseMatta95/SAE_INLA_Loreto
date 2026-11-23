@@ -669,8 +669,8 @@ estimate_prop_edu
 
 
 ```{r}
-ggsave("./figures/main figures/fig4.png", dpi = 300, bg = "white", width = 13, height = 8)
-ggsave("./figures/main figures/fig4.pdf", dpi = 300, bg = "white", width = 13, height = 8)
+#ggsave("./figures/main figures/fig4.png", dpi = 300, bg = "white", width = 13, height = 8)
+#ggsave("./figures/main figures/fig4.pdf", dpi = 300, bg = "white", width = 13, height = 8)
 ```
 
 ```{r}
@@ -751,6 +751,6 @@ ggplot(pred_all_edu %>% filter(model == "m3"), aes(x = median, y = ubigeo)) +
         axis.text.x = element_text(angle = 90)) +
   coord_flip()
 
-ggsave("./figures/sup_result_fig3.1.png", dpi = 300, bg = "white", width = 20, height = 15)
-ggsave("./figures/sup_result_fig3.1.pdf", dpi = 300, bg = "white", width = 20, height = 15)
+#ggsave("./figures/sup_result_fig3.1.png", dpi = 300, bg = "white", width = 20, height = 15)
+#ggsave("./figures/sup_result_fig3.1.pdf", dpi = 300, bg = "white", width = 20, height = 15)
 ```

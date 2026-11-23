@@ -15,7 +15,7 @@ library(survey)
 
 # 1. data ENDES from 2010-2020
 ```{r}
-wi_edu_2010_2020 <-read.csv("./data/wi_edu_2010_2020.csv") %>% mutate(ubigeo = as.character(ubigeo))
+wi_edu_2010_2020<- read.csv("./data/wi_edu_2010_2020.csv") %>% mutate(ubigeo = as.character(ubigeo))
 ```
 
 # 2. Direct estimations with ENDES
@@ -23,7 +23,7 @@ wi_edu_2010_2020 <-read.csv("./data/wi_edu_2010_2020.csv") %>% mutate(ubigeo = a
 ```{r}
 options(survey.lonely.psu = "adjust")
 
-data_final_nest <-
+data_final_nest<-
   wi_edu_2010_2020 %>%
   mutate(hv005 = hv005 / 1000000) %>%
   group_by(year) %>%
@@ -44,14 +44,14 @@ data_final_nest <-
 # 3. Save district-level direct estimates (reference for 02 & 03)
 
 ```{r}
-year_vec <- 2010:2020
+year_vec<- 2010:2020
 
-edu_censo_final_recat <-
+edu_censo_final_recat<-
   map2_df(data_final_nest$edu_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
   as_tibble() %>%
   select(year, ubigeo, hv109_recat, se)
 
-wi_censo_final_recat <-
+wi_censo_final_recat<-
   map2_df(data_final_nest$wi_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
   as_tibble() %>%
   select(year, ubigeo, hv270_recat, se)
@@ -65,19 +65,19 @@ write.csv(wi_censo_final_recat,  "./data/wi_censo_final_recat.csv",  row.names =
 # 4. Save data for descriptive figure 
 
 ```{r}
-df_final_edu <- map2_df(data_final_nest$edu_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
+df_final_edu<- map2_df(data_final_nest$edu_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
   as_tibble() %>%
   rename(estimate = hv109_recat) %>%
   mutate(index = "edu") %>%
   select(year, ubigeo, index, everything())
 
-df_final_wi <- map2_df(data_final_nest$wi_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
+df_final_wi<- map2_df(data_final_nest$wi_directa_recat, year_vec, ~ mutate(.x, year = .y)) %>%
   as_tibble() %>%
   rename(estimate = hv270_recat) %>%
   mutate(index = "wi") %>%
   select(year, ubigeo, index, everything())
 
-df_final <-
+df_final<-
   bind_rows(df_final_edu, df_final_wi) %>%
   filter(year %in% c(2010,2012,2014,2016,2018,2020))
 

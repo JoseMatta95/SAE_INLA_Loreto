@@ -7,21 +7,19 @@ library(ggspatial)
 library(rcartocolor)
 
 data(Peru)
-distritos <- Peru %>% filter(dep == "LORETO")
-data_malaria <- read_csv("./data/malaria_deforest_data.csv")
+distritos<- Peru %>% filter(dep == "LORETO")
+data_malaria<- read_csv("./data/malaria_deforest_data.csv")
 
 rivers<- st_read("./data/aux_data/data_shapefiles/rios-ana/Rios.shp")
 rivers<- st_transform(rivers,st_crs(distritos))
 
-ccpp <- st_read("./data/aux_data/data_shapefiles/boundaries_towncenter/Centros_Poblados_2023_geogpsperu_SuyoPomalia.shp")
+ccpp<- st_read("./data/aux_data/data_shapefiles/boundaries_towncenter/Centros_Poblados_2023_geogpsperu_SuyoPomalia.shp")
 ccpp<- st_transform(ccpp,st_crs(distritos))
 
-# Supplementary materials
-
 ## 1. Supplementary information ----
-### Loreto districts
+### Loreto districts ----
+### Districts from 2016-2020 ----
 
-### Districts from 2016-2020
 map1<-
   distritos %>% 
   ggplot() +
@@ -33,7 +31,7 @@ map1<-
                 ymin = -4.4, ymax = -3.2), 
             color = "black", fill = NA)
 
-### Zoom plot to Iquitos
+### Zoom plot to Iquitos ----
 
 map2<-
   distritos %>% 
@@ -50,15 +48,16 @@ map2<-
                 ymin = -4.449160, ymax = -3.283977), 
             color = "black", fill = NA)
 
-### Districts from 2010-2015
-distritos_union <- distritos %>% 
+### Districts from 2010-2015 ----
+
+distritos_union<- distritos %>% 
   mutate(grupo = ifelse(ubigeo %in% c("160801", "160802", "160803","160804"), 
-                        "mi_union",   # nombre para los unidos
+                        "mi_union",
                         ubigeo),
          
          distr = ifelse(ubigeo %in% c("160801", "160802", "160803","160804"), 
-                        "PUTUMAYO",   # nombre para los unidos
-                        distr)) %>%   # los demás mantienen su nombre
+                        "PUTUMAYO",
+                        distr)) %>%
   group_by(grupo,distr) %>% 
   summarise(geometry = st_union(geometry))
 
@@ -71,22 +70,20 @@ map3<-
                    fontface = ifelse(distr == "IQUITOS", "bold", "plain")), size = 1.5) +
   theme_void() +
   annotation_north_arrow(
-    location = "br",              # esquina (tl, tr, bl, br)
+    location = "br",
     which_north = "true",
-    pad_x = unit(1, "cm"),      # separación horizontal
-    pad_y = unit(0.8, "cm"),      # separación vertical
+    pad_x = unit(1, "cm"),
+    pad_y = unit(0.8, "cm"),
     style = north_arrow_orienteering
   ) +
   
-  # Barra de escala
   annotation_scale(
     width_hint = 0.3,
     location = "br"
     
   )
-####
 
-divider <- ggdraw() + theme_void() +
+divider<- ggdraw() + theme_void() +
   geom_segment(aes(x = 0.5, xend = 0.5, y = 0, yend = 1),
                inherit.aes = FALSE,
                linewidth = 1,
@@ -106,7 +103,7 @@ plot_grid(ggdraw() +
 ##### sm fig 1 ----
 #ggsave("./figures/sm_fig1.png", dpi = 300, bg = "white", height = 7, width = 12)
 
-### Loreto urbanization
+### Loreto urbanization ----
 
 g2<-
   distritos %>% 
@@ -135,7 +132,6 @@ g2<-
     legend.position = "bottom",
     legend.title = element_text(face = "bold")
   ) 
-  #facet_wrap(~year)
 
 g3<-
   distritos %>% 
@@ -164,12 +160,11 @@ g3<-
     legend.position = "bottom",
     legend.title = element_text(face = "bold")
   )
-  #facet_wrap(~year)
 
-### Loreto rivers and ccpp
+### Loreto rivers and ccpp ----
 
-rivers_loreto<-st_intersection(distritos,rivers)
-ccpp <- ccpp %>% filter(cod_dpto == 16)
+rivers_loreto<- st_intersection(distritos,rivers)
+ccpp<- ccpp %>% filter(cod_dpto == 16)
 
 g4<-
   ggplot() +
@@ -205,8 +200,6 @@ plot_grid(
 
 ## 2. Supplementary methods ----
 ##### sm fig 3 ----
-
-# code is part of PCA in 00.raw_data_extraction.R
 
 ## 3. Supplementary results ----
 ##### sm fig 4 ----

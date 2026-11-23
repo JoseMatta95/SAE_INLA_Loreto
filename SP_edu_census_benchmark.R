@@ -1,5 +1,3 @@
-# EDU 2017: Census vs. m3 at department, province and district level
-
 library(INLA)
 library(tidyverse)
 library(haven)
@@ -7,74 +5,65 @@ library(gt)
 library(sf)
 library(innovar)
 
-census_pob <- "~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_POB.sav"
-
 # Census ----
 
-census_district <- read_sav(census_pob,
-                            col_select = c("ubigeo", "departamento", "provincia",
-                                           "distrito", "c5_p13_niv")) %>%
+census_district<- read_sav("~/Downloads/CPV 2017 DISTRITOS disponible en SPSS/censo2017_data/CPV2017_POB.sav",
+                           col_select = c("ubigeo", "departamento", "provincia",
+                                          "distrito", "c5_p13_niv")) %>%
   filter(departamento == "LORETO") %>%
   zap_labels() %>%
   group_by(ubigeo, departamento, provincia, distrito) %>%
-  summarise(n_census   = n(),
+  summarise(n_census = n(),
             edu_census = sum(c5_p13_niv >= 3, na.rm = TRUE),
-            .groups    = "drop")
-
-census_area <- function(group) {
-  census_district %>%
-    group_by(area = .data[[group]]) %>%
-    summarise(census = sum(edu_census) / sum(n_census))
-}
+            .groups = "drop")
 
 # m3 ----
 
-m3 <- readRDS("./data/models/edu_fits.rds")$m3
+m3<- readRDS("./data/models/edu_fits.rds")$m3
 
-pred_2017 <- m3$pred_grid %>%
+pred_2017<- m3$pred_grid %>%
   mutate(pred_row = m3$pred_idx) %>%
   filter(year == 2017) %>%
   left_join(select(census_district, ubigeo, departamento, provincia, n_census), by = "ubigeo") %>%
   mutate(w = n_census * w_stratum)
 
-stopifnot(!anyNA(pred_2017$w), !anyNA(pred_2017$provincia))
+samples<- inla.posterior.sample(n = 5000, result = m3$fit)
 
-samples <- inla.posterior.sample(n = 5000, result = m3$fit)
-
-p_matrix <- sapply(samples, function(s) {
-  nms <- rownames(s$latent)
-  pred_rows <- grep("^APredictor", nms)
-  if (length(pred_rows) == 0) pred_rows <- grep("^Predictor", nms)
+p_matrix<- sapply(samples, function(s) {
+  nms<- rownames(s$latent)
+  pred_rows<- grep("^APredictor", nms)
+  if (length(pred_rows) == 0) pred_rows<- grep("^Predictor", nms)
   plogis(as.numeric(s$latent[pred_rows])[pred_2017$pred_row])
 })
 
-model_area <- function(group) {
-  g   <- pred_2017[[group]]
-  agg <- rowsum(p_matrix * pred_2017$w, g, reorder = FALSE) /
-    as.numeric(rowsum(pred_2017$w, g, reorder = FALSE))
+pred_long<- pred_2017 %>%
+  mutate(row = row_number()) %>%
+  select(row, w, department = departamento, province = provincia, district = ubigeo) %>%
+  pivot_longer(c(department, province, district), names_to = "level", values_to = "area") %>%
+  mutate(key = paste(level, area, sep = "|"))
 
-  tibble(area  = rownames(agg),
-         m3    = rowMeans(agg),
-         lower = apply(agg, 1, quantile, probs = 0.025),
-         upper = apply(agg, 1, quantile, probs = 0.975))
-}
+agg<- rowsum(p_matrix[pred_long$row, ] * pred_long$w, pred_long$key, reorder = FALSE) /
+  as.numeric(rowsum(pred_long$w, pred_long$key, reorder = FALSE))
 
 # Comparison ----
 
-comparison <- tribble(
-  ~level,       ~group,
-  "department", "departamento",
-  "province",   "provincia",
-  "district",   "ubigeo"
-) %>%
-  mutate(data = map(group, ~ left_join(census_area(.x), model_area(.x), by = "area"))) %>%
-  select(-group) %>%
-  unnest(data) %>%
+comparison<- census_district %>%
+  select(n_census, edu_census, department = departamento, province = provincia, district = ubigeo) %>%
+  pivot_longer(c(department, province, district), names_to = "level", values_to = "area") %>%
+  group_by(level, area) %>%
+  summarise(census = sum(edu_census) / sum(n_census), .groups = "drop") %>%
+  left_join(tibble(key = rownames(agg),
+                   m3 = rowMeans(agg),
+                   lower = apply(agg, 1, quantile, probs = 0.025),
+                   upper = apply(agg, 1, quantile, probs = 0.975)) %>%
+              separate(key, c("level", "area"), sep = "\\|"),
+            by = c("level", "area")) %>%
+  mutate(level = factor(level, levels = c("department", "province", "district"))) %>%
+  arrange(level) %>%
   left_join(select(census_district, ubigeo, distrito, provincia), by = c("area" = "ubigeo")) %>%
   mutate(ubigeo = if_else(level == "district", area, NA_character_),
          area = coalesce(distrito, area),
-         diff = round((m3 - census),2),
-         level = fct_inorder(level)) %>%
+         diff = round((m3 - census),2)) %>%
   select(-distrito)
 
 comparison %>%
@@ -94,7 +83,7 @@ comparison %>%
 
 data(Peru)
 
-map_district <- Peru %>%
+map_district<- Peru %>%
   mutate(ubigeo = as.character(ubigeo)) %>%
   filter(dep == "LORETO") %>%
   left_join(comparison %>%
@@ -102,7 +91,7 @@ map_district <- Peru %>%
               select(ubigeo, provincia, diff),
             by = "ubigeo")
 
-map_province <- map_district %>%
+map_province<- map_district %>%
   group_by(provincia) %>%
   summarise() %>%
   left_join(comparison %>%
@@ -110,7 +99,7 @@ map_province <- map_district %>%
               select(provincia = area, diff),
             by = "provincia")
 
-signed_limit <- max(abs(map_district$diff), na.rm = TRUE) * 100
+signed_limit<- max(abs(map_district$diff), na.rm = TRUE) * 100
 
 plot_grid(
 ggplot(map_district) +
@@ -135,17 +124,17 @@ ggplot(map_province) +
 
 distrito<-
   comparison %>%
-  filter(level == "district") %>% 
+  filter(level == "district") %>%
   mutate(
     provcode = substr(ubigeo,1,4),
-    sampled  = ubigeo %in% (read.csv("./data/wi_edu_2010_2020.csv") %>% filter(year == 2017) %>% pull(ubigeo) %>% as.character())
+    sampled = ubigeo %in% (read.csv("./data/wi_edu_2010_2020.csv") %>% filter(year == 2017) %>% pull(ubigeo) %>% as.character())
   ) %>%
   ggplot()+
   geom_pointrange(aes(x = fct_rev(ubigeo), y = m3,
                       ymin = lower, ymax = upper, shape = sampled),
                   col = "red4",
                   alpha = .5, linewidth = 1) +
-  geom_point(aes(x  = fct_rev(ubigeo), y = census), col = "blue4") +
+  geom_point(aes(x = fct_rev(ubigeo), y = census), col = "blue4") +
   scale_shape_manual(values = c("TRUE" = 16, "FALSE" = 1),
                      labels = c("TRUE" = "Sampled 2017", "FALSE" = "Not sampled 2017"),
                      name = NULL) +
@@ -169,7 +158,7 @@ comparison %>%
                       ymin = lower, ymax = upper),
                   col = "red4",
                   alpha = .5, linewidth = 1) +
-  geom_point(aes(x  = area, y = census), col = "blue4") +
+  geom_point(aes(x = area, y = census), col = "blue4") +
   labs( x= "province", y = "proportion") +
   coord_flip() +
   theme_classic() +
@@ -180,7 +169,7 @@ comparison %>%
 
 cowplot::plot_grid(
   provincia,distrito,
-  
+
   labels = c("a","b")
 )
 
@@ -191,7 +180,7 @@ ggsave("./figures/sup_result_fig3.8.pdf", dpi = 300, width = 9.4)
 comparison %>%
   filter(level != "department") %>%
   group_by(level) %>%
-  summarise(n   = n(),
+  summarise(n = n(),
             MAE = mean(abs(m3 - census)),
             .groups = "drop") %>%
   gt() %>%

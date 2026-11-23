@@ -43,12 +43,20 @@ malaria_dist_total<- read_csv("./data/aux_data/malaria_dist_total.csv") %>%
   mutate(
     malaria_incidence = ifelse(is.na(malaria_incidence),0,malaria_incidence)
   )
+
+malaria_dist_total %>% 
+  group_by(prov.code) %>% 
+  summarise(
+    pop_prov = sum(pop_landscan),
+    cases_prov = sum(n, na.rm = T),
+    incidence_prov = (cases_prov/pop_prov)*1000
+  )
 ```
 
 # MALARIA -----
 
 ```{r}
-g<-wi_edu %>%
+g<- wi_edu %>%
   select(year, hv001, long, lat) %>%
   st_as_sf(coords = c("long", "lat"), crs = 4326, remove = FALSE) %>%
   group_by(year, hv001) %>%
@@ -158,7 +166,7 @@ legend_prov<- gtable::gtable_add_padding(
   padding = unit(c(1, 0, 0, 1), "cm")
 )
 
-loreto_malaria_area_nolegend<-loreto_malaria_area + theme(legend.position = "none")
+loreto_malaria_area_nolegend<- loreto_malaria_area + theme(legend.position = "none")
 ```
 
 ```{r}
@@ -535,7 +543,6 @@ ggsave("./figures/main figures/fig6.pdf", dpi = 300, bg = "white", width = 12, h
 ```
 
 ```{r}
-# sup_result_fig2 — mapas incidencia malaria, todos los años
 malaria_dist_total %>%
   ggplot() +
   geom_sf(aes(fill = log10(malaria_incidence))) +
