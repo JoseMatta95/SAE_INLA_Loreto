@@ -82,7 +82,7 @@ district_samples<- function(modelo_inla, pred_data, pred_idx, label, n_sim = 500
       model = label,
       mean = rowMeans(district),
       median = apply(district, 1, median),
-      lower = apply(district, 1, quantile, probs = 0.025),
+      lower = apply(district,1, quantile, probs = 0.025),
       upper = apply(district, 1, quantile, probs = 0.975),
       sd = apply(district, 1, sd)
     )
